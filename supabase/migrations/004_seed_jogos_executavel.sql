@@ -1,0 +1,121 @@
+-- ============================================================
+-- WCP – Seed helper: Criar bolão de exemplo com jogos
+-- Substitua 'TEST_POOL_ID' pelos UUIDs reais ou deixe gerar
+-- ============================================================
+
+-- Criar um bolão de teste (COMENTADO - descomente se usar)
+-- INSERT INTO pools (name, owner_id) VALUES
+--   ('Bolão Teste Copa 2026', (SELECT id FROM profiles LIMIT 1));
+-- 
+-- Depois copie o pool_id e use nos comandos abaixo.
+
+-- ============================================================
+-- VARIÁVEIS (substitua pelos seus valores reais)
+-- ============================================================
+-- Define pool_id: você deve substituir por um UUID real
+-- SELECT id FROM pools WHERE name = 'Seu Bolão' LIMIT 1;
+
+-- Criar rounds para cada grupo (EXEMPLO com placeholders)
+-- Descomente e substitua <POOL_ID> por um UUID válido do seu bolão
+
+-- INSERT INTO rounds (pool_id, name, phase) VALUES
+--   ('<POOL_ID>', 'Grupo A – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo A – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo A – Rodada 3', 'grupos'),
+--   ('<POOL_ID>', 'Grupo B – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo B – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo B – Rodada 3', 'grupos'),
+--   ('<POOL_ID>', 'Grupo C – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo C – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo C – Rodada 3', 'grupos'),
+--   ('<POOL_ID>', 'Grupo D – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo D – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo D – Rodada 3', 'grupos'),
+--   ('<POOL_ID>', 'Grupo E – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo E – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo E – Rodada 3', 'grupos'),
+--   ('<POOL_ID>', 'Grupo F – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo F – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo F – Rodada 3', 'grupos'),
+--   ('<POOL_ID>', 'Grupo G – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo G – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo G – Rodada 3', 'grupos'),
+--   ('<POOL_ID>', 'Grupo H – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo H – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo H – Rodada 3', 'grupos'),
+--   ('<POOL_ID>', 'Grupo I – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo I – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo I – Rodada 3', 'grupos'),
+--   ('<POOL_ID>', 'Grupo J – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo J – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo J – Rodada 3', 'grupos'),
+--   ('<POOL_ID>', 'Grupo K – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo K – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo K – Rodada 3', 'grupos'),
+--   ('<POOL_ID>', 'Grupo L – Rodada 1', 'grupos'),
+--   ('<POOL_ID>', 'Grupo L – Rodada 2', 'grupos'),
+--   ('<POOL_ID>', 'Grupo L – Rodada 3', 'grupos');
+
+-- ============================================================
+-- JOGOS – EXEMPLO DE INSERÇÃO (descomente e customize)
+-- ============================================================
+
+-- GRUPO A
+-- INSERT INTO matches (round_id, group_id, home_team_id, away_team_id, kickoff_at) VALUES
+--   (
+--     (SELECT id FROM rounds WHERE name='Grupo A – Rodada 1' AND pool_id='<POOL_ID>' LIMIT 1),
+--     (SELECT id FROM groups WHERE code='A'),
+--     (SELECT id FROM teams WHERE name='México'),
+--     (SELECT id FROM teams WHERE name='África do Sul'),
+--     '2026-06-11 12:00:00+00'
+--   ),
+--   (
+--     (SELECT id FROM rounds WHERE name='Grupo A – Rodada 1' AND pool_id='<POOL_ID>' LIMIT 1),
+--     (SELECT id FROM groups WHERE code='A'),
+--     (SELECT id FROM teams WHERE name='Coreia do Sul'),
+--     (SELECT id FROM teams WHERE name='República Tcheca'),
+--     '2026-06-11 15:00:00+00'
+--   ),
+--   (
+--     (SELECT id FROM rounds WHERE name='Grupo A – Rodada 2' AND pool_id='<POOL_ID>' LIMIT 1),
+--     (SELECT id FROM groups WHERE code='A'),
+--     (SELECT id FROM teams WHERE name='República Tcheca'),
+--     (SELECT id FROM teams WHERE name='África do Sul'),
+--     '2026-06-15 12:00:00+00'
+--   ),
+--   (
+--     (SELECT id FROM rounds WHERE name='Grupo A – Rodada 2' AND pool_id='<POOL_ID>' LIMIT 1),
+--     (SELECT id FROM groups WHERE code='A'),
+--     (SELECT id FROM teams WHERE name='México'),
+--     (SELECT id FROM teams WHERE name='Coreia do Sul'),
+--     '2026-06-15 15:00:00+00'
+--   ),
+--   (
+--     (SELECT id FROM rounds WHERE name='Grupo A – Rodada 3' AND pool_id='<POOL_ID>' LIMIT 1),
+--     (SELECT id FROM groups WHERE code='A'),
+--     (SELECT id FROM teams WHERE name='República Tcheca'),
+--     (SELECT id FROM teams WHERE name='México'),
+--     '2026-06-19 18:00:00+00'
+--   ),
+--   (
+--     (SELECT id FROM rounds WHERE name='Grupo A – Rodada 3' AND pool_id='<POOL_ID>' LIMIT 1),
+--     (SELECT id FROM groups WHERE code='A'),
+--     (SELECT id FROM teams WHERE name='África do Sul'),
+--     (SELECT id FROM teams WHERE name='Coreia do Sul'),
+--     '2026-06-19 18:00:00+00'
+--   );
+
+-- ============================================================
+-- GUIA: Como usar este arquivo
+-- ============================================================
+-- 1. Crie um bolão manualmente no app ou descomente a inserção acima
+-- 2. Copie o pool_id (uuid) do bolão criado
+-- 3. Substitua '<POOL_ID>' em todos os comandos abaixo por esse uuid
+-- 4. Descomente os blocos de INSERT
+-- 5. Execute no Supabase SQL Editor
+-- 6. Valide com: SELECT * FROM rounds WHERE pool_id = '<POOL_ID>';
+
+-- ============================================================
+-- DADOS COMPLETOS DOS JOGOS (36 rodadas × 2 jogos = 72 matches)
+-- Disponível em: backend/scripts/generate_matches.js
+-- ============================================================
