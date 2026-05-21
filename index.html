@@ -5,7 +5,20 @@
     <link rel="icon" type="image/svg+xml" href="/WCP/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>wcp</title>
-    <script type="module" crossorigin src="/WCP/assets/index-CFCLZQBs.js"></script>
+    <script>
+      // GitHub Pages SPA deep-link support.
+      ;(function () {
+        var redirect = window.location.search
+        if (redirect.startsWith('?/')) {
+          var decoded = redirect
+            .slice(2)
+            .replace(/~and~/g, '&')
+          var target = window.location.pathname + decoded + window.location.hash
+          window.history.replaceState(null, '', target)
+        }
+      })()
+    </script>
+    <script type="module" crossorigin src="/WCP/assets/index-CMEMWT_o.js"></script>
     <link rel="stylesheet" crossorigin href="/WCP/assets/index-BSzlKAHk.css">
   </head>
   <body>
