@@ -7,6 +7,7 @@ interface Pool {
   id: string
   name: string
   owner_id: string
+  is_default_global?: boolean
 }
 
 export default function DashboardPage() {
@@ -18,6 +19,7 @@ export default function DashboardPage() {
   const [creating, setCreating] = useState(false)
   const [selectingPoolId, setSelectingPoolId] = useState<string | null>(null)
   const [showForm, setShowForm] = useState(false)
+  const [memberPoolIds, setMemberPoolIds] = useState<string[]>([])
 
   useEffect(() => {
     if (user) loadPools()
@@ -42,7 +44,7 @@ export default function DashboardPage() {
 
     const { data, error } = await supabase
       .from('pool_members')
-      .select('pool_id, pools(id, name, owner_id)')
+      .select('pool_id, pools(id, name, owner_id, is_default_global)')
       .eq('user_id', user!.id)
 
     if (error) {
@@ -60,8 +62,23 @@ export default function DashboardPage() {
       })
     }
 
-    const list = (data ?? []).map((r: any) => r.pools).filter(Boolean) as Pool[]
-    setPools(list)
+    const memberList = (data ?? []).map((r: any) => r.pools).filter(Boolean) as Pool[]
+    const memberIds = (data ?? []).map((r: any) => r.pool_id).filter(Boolean) as string[]
+
+    const { data: defaultPoolData } = await supabase
+      .from('pools')
+      .select('id, name, owner_id, is_default_global')
+      .eq('is_default_global', true)
+      .limit(1)
+
+    const defaultPool = (defaultPoolData?.[0] as Pool | undefined) ?? null
+    const merged = [...memberList]
+    if (defaultPool && !merged.some(pool => pool.id === defaultPool.id)) {
+      merged.push(defaultPool)
+    }
+
+    setMemberPoolIds(memberIds)
+    setPools(merged)
     setLoading(false)
   }
 
@@ -86,6 +103,12 @@ export default function DashboardPage() {
 
   async function handleChooseActivePool(poolId: string) {
     setSelectingPoolId(poolId)
+
+    if (!memberPoolIds.includes(poolId)) {
+      await (supabase.from('pool_members') as any).insert({ pool_id: poolId, user_id: user!.id })
+      setMemberPoolIds(prev => (prev.includes(poolId) ? prev : [...prev, poolId]))
+    }
+
     const { error } = await setActivePool(poolId)
     if (!error) {
       navigate(`/bolao/${poolId}`)
@@ -151,6 +174,11 @@ export default function DashboardPage() {
               <p className="text-sm text-gray-400 mt-1">
                 {pool.owner_id === user?.id ? 'Você é o dono' : 'Participante'}
               </p>
+              {pool.is_default_global && (
+                <span className="inline-block mt-2 text-xs font-semibold px-2 py-1 rounded-full bg-indigo-100 text-indigo-700">
+                  Bolão padrão
+                </span>
+              )}
 
               <div className="mt-4 flex items-center justify-between">
                 {profile?.active_pool_id === pool.id ? (

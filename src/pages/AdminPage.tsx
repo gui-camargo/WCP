@@ -67,6 +67,12 @@ export default function AdminPage() {
   const [matchMessage, setMatchMessage] = useState<Record<string, string>>({})
   const [groupFilter, setGroupFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState<'all' | 'pendente' | 'encerrado'>('all')
+  const [isGlobalDefault, setIsGlobalDefault] = useState(false)
+  const [updatingDefault, setUpdatingDefault] = useState(false)
+  const [defaultMessage, setDefaultMessage] = useState('')
+  const [groupPredictionsCutoffDraft, setGroupPredictionsCutoffDraft] = useState('')
+  const [savingGroupPredictionsCutoff, setSavingGroupPredictionsCutoff] = useState(false)
+  const [groupPredictionsCutoffMessage, setGroupPredictionsCutoffMessage] = useState('')
 
   const availableGroups = Array.from(
     new Set(matches.map(m => m.group?.code).filter((code): code is string => Boolean(code)))
@@ -94,6 +100,15 @@ export default function AdminPage() {
   }, [selectedRoundId])
 
   async function loadData() {
+    const { data: poolData } = await supabase
+      .from('pools')
+      .select('is_default_global, group_predictions_cutoff_at')
+      .eq('id', poolId!)
+      .single()
+
+    setIsGlobalDefault(Boolean((poolData as any)?.is_default_global))
+    setGroupPredictionsCutoffDraft(toDateTimeLocalValue((poolData as any)?.group_predictions_cutoff_at ?? null))
+
     const { data: memberData } = await supabase
       .from('pool_members')
       .select('user_id')
@@ -133,6 +148,58 @@ export default function AdminPage() {
     } else if (!selectedRoundId || !nextRounds.some(r => r.id === selectedRoundId)) {
       setSelectedRoundId(nextRounds[nextRounds.length - 1].id)
     }
+  }
+
+  async function setAsGlobalDefault() {
+    if (!poolId || updatingDefault) return
+
+    setUpdatingDefault(true)
+    setDefaultMessage('')
+
+    const { error } = await (supabase as any).rpc('set_global_default_pool', { p_pool_id: poolId })
+    if (error) {
+      setDefaultMessage('Erro ao definir bolão padrão global.')
+      setUpdatingDefault(false)
+      return
+    }
+
+    setIsGlobalDefault(true)
+    setDefaultMessage('Bolão definido como padrão global.')
+    setUpdatingDefault(false)
+  }
+
+  async function saveGroupPredictionsCutoff() {
+    if (!poolId || savingGroupPredictionsCutoff) return
+
+    setSavingGroupPredictionsCutoff(true)
+    setGroupPredictionsCutoffMessage('')
+
+    let nextValue: string | null = null
+    if (groupPredictionsCutoffDraft) {
+      const parsed = new Date(groupPredictionsCutoffDraft)
+      if (Number.isNaN(parsed.getTime())) {
+        setGroupPredictionsCutoffMessage('Data invalida para prazo da classificacao.')
+        setSavingGroupPredictionsCutoff(false)
+        return
+      }
+      nextValue = parsed.toISOString()
+    }
+
+    const { error } = await (supabase.from('pools') as any)
+      .update({ group_predictions_cutoff_at: nextValue })
+      .eq('id', poolId)
+
+    if (error) {
+      setGroupPredictionsCutoffMessage('Erro ao salvar prazo da classificacao.')
+    } else {
+      setGroupPredictionsCutoffMessage(
+        nextValue
+          ? 'Prazo proprio da classificacao salvo com sucesso.'
+          : 'Prazo proprio removido. O sistema vai usar o prazo automatico.'
+      )
+    }
+
+    setSavingGroupPredictionsCutoff(false)
   }
 
   async function loadMatches(roundId: string) {
@@ -314,15 +381,63 @@ export default function AdminPage() {
         <div className="absolute -bottom-10 -left-8 h-24 w-24 rounded-full bg-emerald-200/40 blur-2xl" />
 
         <div className="relative z-10">
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <span className="modern-chip">Admin</span>
-            <span className="modern-chip">{members.length} participantes</span>
-            <span className="modern-chip">{rounds.length} rodadas</span>
-          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-800">Administração do Bolão</h1>
+          <p className="text-sm mt-2 text-gray-600">{members.length} participantes • {rounds.length} rodadas</p>
           <p className="text-sm mt-1 text-gray-600">Gestão de participantes, rodadas, resultados e cutoff por partida.</p>
         </div>
       </div>
+
+      <section>
+        <h2 className="text-lg font-bold text-gray-700 mb-3 border-b border-gray-200 pb-2">Configuração Global</h2>
+        <div className="modern-card p-4 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-gray-800">Bolão padrão para novos usuários</p>
+              <p className="text-sm text-gray-500">
+                {isGlobalDefault
+                  ? 'Este bolão já está marcado como padrão global.'
+                  : 'Defina este bolão como padrão geral de entrada.'}
+              </p>
+            </div>
+            <button
+              onClick={setAsGlobalDefault}
+              disabled={isGlobalDefault || updatingDefault}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              {updatingDefault ? 'Salvando...' : isGlobalDefault ? 'Padrão global ativo' : 'Definir como padrão global'}
+            </button>
+          </div>
+          {defaultMessage && <p className="text-sm mt-3 text-gray-600">{defaultMessage}</p>}
+
+          <div className="pt-4 border-t border-gray-100">
+            <p className="text-sm font-semibold text-gray-800">Prazo próprio para palpite de classificação</p>
+            <p className="text-sm text-gray-500 mt-0.5">
+              Define o fechamento de 1º/2º colocados por grupo. Se vazio, usa automaticamente o cutoff da primeira partida da fase de grupos.
+            </p>
+
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <input
+                type="datetime-local"
+                value={groupPredictionsCutoffDraft}
+                onChange={e => setGroupPredictionsCutoffDraft(e.target.value)}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+
+              <button
+                onClick={saveGroupPredictionsCutoff}
+                disabled={savingGroupPredictionsCutoff}
+                className="bg-brand-600 hover:bg-brand-700 text-white px-3 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+              >
+                {savingGroupPredictionsCutoff ? 'Salvando...' : 'Salvar prazo'}
+              </button>
+            </div>
+
+            {groupPredictionsCutoffMessage && (
+              <p className="text-sm mt-2 text-gray-600">{groupPredictionsCutoffMessage}</p>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Membros */}
       <section>

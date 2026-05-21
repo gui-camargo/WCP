@@ -80,6 +80,9 @@ export default function PalpitesPage() {
     setLoadingPreds(false)
   }
 
+  const releasedMatchesCount = matches.filter(m => new Date(m.cutoff_at) <= new Date()).length
+  const hiddenMatchesCount = Math.max(matches.length - releasedMatchesCount, 0)
+
   return (
     <div className="space-y-6">
       <div className="modern-card soft-hover fade-rise relative overflow-hidden p-5 sm:p-6">
@@ -87,12 +90,12 @@ export default function PalpitesPage() {
         <div className="absolute -bottom-10 -left-8 h-24 w-24 rounded-full bg-emerald-200/40 blur-2xl" />
 
         <div className="relative z-10">
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <span className="modern-chip">Visão da rodada</span>
-            <span className="modern-chip">Cutoff por jogo</span>
-            <span className="modern-chip">{matches.length} partidas</span>
-          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-800">Palpites — {roundName}</h1>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="modern-chip">{matches.length} jogos</span>
+            <span className="modern-chip">{releasedMatchesCount} jogos liberados</span>
+            <span className="modern-chip">{hiddenMatchesCount} jogos ocultos</span>
+          </div>
           <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3 inline-block">
             ⏳ Palpites alheios ficam visíveis apenas após o cutoff de cada partida.
           </p>

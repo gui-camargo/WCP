@@ -40,9 +40,13 @@ export default function RankingPage() {
 
   return (
     <div>
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Ranking — {poolName}</h1>
-        <p className="text-sm text-gray-500 mt-1">Pontuação geral do bolão</p>
+      <div className="modern-card soft-hover fade-rise relative overflow-hidden p-5 sm:p-6 mb-6">
+        <div className="absolute -top-10 -right-12 h-28 w-28 rounded-full bg-sky-200/40 blur-2xl" />
+        <div className="absolute -bottom-10 -left-8 h-24 w-24 rounded-full bg-emerald-200/40 blur-2xl" />
+        <div className="relative z-10">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-800">Ranking — {poolName}</h1>
+          <p className="text-sm text-gray-600 mt-2">Pontuação geral do bolão</p>
+        </div>
       </div>
 
       {loading ? (

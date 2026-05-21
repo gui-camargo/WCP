@@ -12,9 +12,9 @@ export interface Database {
         Update: { name?: string; email?: string; is_admin?: boolean; active_pool_id?: string | null }
       }
       pools: {
-        Row: { id: string; name: string; owner_id: string; created_at: string }
-        Insert: { name: string; owner_id: string }
-        Update: { name?: string }
+        Row: { id: string; name: string; owner_id: string; is_default_global: boolean; group_predictions_cutoff_at: string | null; created_at: string }
+        Insert: { name: string; owner_id: string; is_default_global?: boolean; group_predictions_cutoff_at?: string | null }
+        Update: { name?: string; is_default_global?: boolean; group_predictions_cutoff_at?: string | null }
       }
       pool_members: {
         Row: { pool_id: string; user_id: string; joined_at: string }
