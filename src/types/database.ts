@@ -12,9 +12,18 @@ export interface Database {
         Update: { name?: string; email?: string; is_admin?: boolean; active_pool_id?: string | null }
       }
       pools: {
-        Row: { id: string; name: string; owner_id: string; is_default_global: boolean; group_predictions_cutoff_at: string | null; created_at: string }
-        Insert: { name: string; owner_id: string; is_default_global?: boolean; group_predictions_cutoff_at?: string | null }
-        Update: { name?: string; is_default_global?: boolean; group_predictions_cutoff_at?: string | null }
+        Row: {
+          id: string; name: string; owner_id: string; is_default_global: boolean
+          group_predictions_cutoff_at: string | null; podium_predictions_cutoff_at: string | null; created_at: string
+        }
+        Insert: {
+          name: string; owner_id: string; is_default_global?: boolean
+          group_predictions_cutoff_at?: string | null; podium_predictions_cutoff_at?: string | null
+        }
+        Update: {
+          name?: string; is_default_global?: boolean
+          group_predictions_cutoff_at?: string | null; podium_predictions_cutoff_at?: string | null
+        }
       }
       pool_members: {
         Row: { pool_id: string; user_id: string; joined_at: string }
@@ -65,6 +74,25 @@ export interface Database {
         Insert: { pool_id: string; match_id: string; user_id: string; home_guess: number; away_guess: number }
         Update: { home_guess?: number; away_guess?: number }
       }
+      payments: {
+        Row: {
+          id: string; pool_id: string; user_id: string
+          amount_cents: number; status: 'pendente' | 'confirmado' | 'rejeitado'
+          paid_at: string | null; confirmed_at: string | null; confirmed_by: string | null
+          notes: string | null; created_at: string; updated_at: string
+        }
+        Insert: {
+          pool_id: string; user_id: string; amount_cents?: number
+          status?: 'pendente' | 'confirmado' | 'rejeitado'
+          paid_at?: string | null; confirmed_at?: string | null; confirmed_by?: string | null
+          notes?: string | null
+        }
+        Update: {
+          amount_cents?: number; status?: 'pendente' | 'confirmado' | 'rejeitado'
+          paid_at?: string | null; confirmed_at?: string | null; confirmed_by?: string | null
+          notes?: string | null
+        }
+      }
       group_predictions: {
         Row: {
           id: string; pool_id: string; user_id: string; group_id: string
@@ -73,10 +101,30 @@ export interface Database {
         Insert: { pool_id: string; user_id: string; group_id: string; first_id: string; second_id: string }
         Update: { first_id?: string; second_id?: string }
       }
+      podium_predictions: {
+        Row: {
+          id: string; pool_id: string; user_id: string
+          champion_id: string; vice_id: string; third_id: string
+          points: number | null; created_at: string
+        }
+        Insert: { pool_id: string; user_id: string; champion_id: string; vice_id: string; third_id: string }
+        Update: { champion_id?: string; vice_id?: string; third_id?: string }
+      }
     }
     Views: {
       leaderboard: {
-        Row: { pool_id: string; user_id: string; user_name: string; total_points: number; rank: number }
+        Row: {
+          pool_id: string
+          user_id: string
+          user_name: string
+          total_points: number
+          rank: number
+          c20: number
+          c15: number
+          c10: number
+          c5: number
+          c0: number
+        }
       }
     }
     Functions: {

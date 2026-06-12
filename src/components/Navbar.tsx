@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/contexts/AuthContext'
 import { supabase } from '@/lib/supabase'
+import icon from '@/assets/icon.png'
 
 export default function Navbar() {
   const { profile, signOut } = useAuth()
@@ -60,9 +61,9 @@ export default function Navbar() {
     return `/bolao/${activePoolId}/regulamento`
   }, [activePoolId])
 
-  const classificacaoHref = useMemo(() => {
+  const rankingHref = useMemo(() => {
     if (!activePoolId) return '/dashboard'
-    return `/bolao/${activePoolId}/classificacao`
+    return `/bolao/${activePoolId}/ranking`
   }, [activePoolId])
 
   async function handleSignOut() {
@@ -76,10 +77,14 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="bg-brand-700 text-white shadow-md relative">
+    <nav className="bg-blue-950 text-white shadow-lg relative z-20">
       <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-        <Link to="/dashboard" className="font-bold text-xl tracking-tight">
-          🏆 Bolão Copa
+        <Link to="/dashboard" className="inline-flex items-center gap-2 font-bold text-xl tracking-tight">
+          <img src={icon} alt="Ícone Bolão" className="h-7 w-7 rounded-md bg-white/10 p-0.5" />
+          <span className="font-bebas tracking-wider uppercase">
+            <span className="hidden md:inline text-lg">Bolão 'Bruno Ba-BET' Copa 2026</span>
+            <span className="md:hidden text-lg">Bolão 'Bruno Ba-BET' 2026</span>
+          </span>
         </Link>
 
         <div className="hidden md:flex items-center gap-3 text-sm">
@@ -87,14 +92,14 @@ export default function Navbar() {
             <Link to={homeHref} className="px-2 py-1 rounded-lg hover:bg-white/10 transition">Home</Link>
             <Link to={meusPalpitesHref} className="px-2 py-1 rounded-lg hover:bg-white/10 transition">Meus Palpites</Link>
             <Link to={jogosHref} className="px-2 py-1 rounded-lg hover:bg-white/10 transition">Resultados</Link>
-            <Link to={classificacaoHref} className="px-2 py-1 rounded-lg hover:bg-white/10 transition">Ranking</Link>
+            <Link to={rankingHref} className="px-2 py-1 rounded-lg hover:bg-white/10 transition">Ranking</Link>
             <Link to={regulamentoHref} className="px-2 py-1 rounded-lg hover:bg-white/10 transition">Regulamento</Link>
           </div>
 
           <div className="relative">
             <button
               onClick={() => setUserMenuOpen(open => !open)}
-              className="inline-flex items-center gap-2 bg-white text-brand-700 px-3 py-1.5 rounded-xl text-sm font-semibold hover:bg-brand-50 transition"
+              className="inline-flex items-center gap-2 bg-white text-blue-900 px-3 py-1.5 rounded-xl text-sm font-semibold hover:bg-blue-50 transition"
             >
               {profile?.name ?? 'Usuário'}
               <span className="text-xs">▾</span>
@@ -103,6 +108,15 @@ export default function Navbar() {
             {userMenuOpen && (
               <div className="absolute right-0 mt-2 w-44 rounded-xl bg-white text-gray-700 shadow-lg border border-gray-100 overflow-hidden z-30">
                 <div className="px-3 py-2 text-xs text-gray-500 border-b border-gray-100">Conta logada</div>
+                {profile?.is_admin && activePoolId && (
+                  <Link
+                    to={`/bolao/${activePoolId}/admin`}
+                    onClick={() => setUserMenuOpen(false)}
+                    className="block w-full text-left px-3 py-2 text-sm font-medium hover:bg-gray-50 transition"
+                  >
+                    Administração
+                  </Link>
+                )}
                 <button
                   onClick={handleSignOut}
                   className="w-full text-left px-3 py-2 text-sm font-medium hover:bg-red-50 hover:text-red-600 transition"
@@ -127,7 +141,7 @@ export default function Navbar() {
       </div>
 
       {mobileMenuOpen && (
-        <div className="md:hidden border-t border-white/15 bg-brand-800/95 backdrop-blur px-4 py-4 space-y-3">
+        <div className="md:hidden border-t border-white/15 bg-blue-950 backdrop-blur px-4 py-4 space-y-3">
           <Link to={homeHref} onClick={handleMobileNavigate} className="block rounded-lg px-3 py-2 bg-white/5 hover:bg-white/10 transition">
             Home
           </Link>
@@ -137,7 +151,7 @@ export default function Navbar() {
           <Link to={jogosHref} onClick={handleMobileNavigate} className="block rounded-lg px-3 py-2 bg-white/5 hover:bg-white/10 transition">
             Resultados
           </Link>
-          <Link to={classificacaoHref} onClick={handleMobileNavigate} className="block rounded-lg px-3 py-2 bg-white/5 hover:bg-white/10 transition">
+          <Link to={rankingHref} onClick={handleMobileNavigate} className="block rounded-lg px-3 py-2 bg-white/5 hover:bg-white/10 transition">
             Ranking
           </Link>
           <Link to={regulamentoHref} onClick={handleMobileNavigate} className="block rounded-lg px-3 py-2 bg-white/5 hover:bg-white/10 transition">
@@ -155,6 +169,15 @@ export default function Navbar() {
                 Sair
               </button>
             </div>
+            {profile?.is_admin && activePoolId && (
+              <Link
+                to={`/bolao/${activePoolId}/admin`}
+                onClick={handleMobileNavigate}
+                className="mt-2 block rounded-lg px-3 py-2 bg-white/5 hover:bg-white/10 transition text-sm"
+              >
+                Administração
+              </Link>
+            )}
           </div>
         </div>
       )}

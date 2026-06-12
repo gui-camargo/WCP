@@ -1,27 +1,26 @@
-import { Link, useParams } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
+import BackButton from '@/components/BackButton'
+import { IconDocument } from '@/components/Icons'
 
 export default function RegulamentoPage() {
   const { poolId } = useParams()
 
   return (
     <div className="space-y-6 max-w-3xl mx-auto">
+      <div>
+        <BackButton to={poolId ? `/bolao/${poolId}` : '/dashboard'} label="Voltar ao Bolão" />
+      </div>
+
       {/* Header */}
-      <section className="modern-card soft-hover fade-rise relative overflow-hidden p-5 sm:p-6">
-        <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-sky-200/40 blur-2xl" />
-        <div className="absolute -bottom-10 -left-10 h-28 w-28 rounded-full bg-emerald-200/40 blur-2xl" />
-        <div className="relative z-10 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-800">
-              Regulamento Bolão Copa
-            </h1>
-            <p className="text-sm text-gray-500 mt-1">Regras vigentes para a edição atual.</p>
+      <section className="relative px-0.5 py-0.5">
+        <div className="border-b border-slate-200 pb-1.5">
+          <div className="inline-flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-blue-950 text-white flex-shrink-0">
+              <IconDocument className="w-4 h-4 sm:w-5 sm:h-5" />
+            </span>
+            <h1 className="text-lg sm:text-xl font-black tracking-tight text-slate-800 leading-tight">Regulamento Bolão Copa</h1>
           </div>
-          <Link
-            to={poolId ? `/bolao/${poolId}` : '/dashboard'}
-            className="inline-flex items-center px-3 py-2 rounded-xl bg-white/90 border border-gray-200 text-gray-700 text-sm font-semibold hover:bg-white transition shrink-0"
-          >
-            ← Voltar
-          </Link>
+          <p className="mt-0.5 text-[11px] sm:text-xs text-slate-600">Regras vigentes para a edição atual.</p>
         </div>
       </section>
 
@@ -67,26 +66,25 @@ export default function RegulamentoPage() {
 
       {/* Palpites de Classificação */}
       <section className="modern-card p-5 sm:p-6">
-        <h2 className="text-base font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">Palpites de Classificação da Fase de Grupos</h2>
-        <ol className="space-y-3 text-sm text-gray-700 leading-relaxed list-none" start={9.5}>
+        <h2 className="text-base font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">Palpites de Classificação (Grupos e Colocados Finais)</h2>
+        <ul className="space-y-3 text-sm text-gray-700 leading-relaxed list-disc ml-5">
           <li>
-            <span className="font-semibold">9.5º</span> — Além dos palpites de placares, o participante também deve indicar qual time ficará em 1º e qual ficará em 2º lugar em cada grupo da fase de grupos.
+            Além dos palpites de placares, o participante também deve indicar: 1º e 2º lugar de cada grupo e os colocados finais (Campeão, Vice-Campeão e 3º lugar).
           </li>
           <li>
-            <span className="font-semibold">9.6º</span> — A entrada de palpites de classificação tem um prazo próprio, que será informado no sistema. 
-            Este prazo pode ser definido especificamente pelo administrador do bolão ou, automaticamente, será o cutoff da primeira partida da fase de grupos (2 horas antes).
+            Os palpites de classificação têm prazo próprio, informado no sistema. Este prazo pode ser definido pelo administrador do bolão ou, automaticamente, será o cutoff da primeira partida da fase de grupos (2 horas antes).
           </li>
           <li>
-            <span className="font-semibold">9.7º</span> — Após o prazo de classificação encerrar, os palpites dos participantes ficarão visíveis para todos os membros do bolão.
+            Após o encerramento do prazo de classificação, os palpites dos participantes ficam visíveis para todos os membros do bolão.
           </li>
-        </ol>
+        </ul>
       </section>
 
       {/* Pontuação */}
       <section className="modern-card p-5 sm:p-6">
         <h2 className="text-base font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">Pontuação</h2>
         <p className="text-sm text-gray-700 mb-3">
-          <span className="font-semibold">10º</span> — A pontuação será computada por cada jogo e segue o seguinte critério:
+          A pontuação será computada por cada jogo e segue o seguinte critério:
           <br />
           <span className="text-xs text-gray-500">Pontuação válida para todos os jogos, até o jogo final.</span>
         </p>
@@ -106,15 +104,31 @@ export default function RegulamentoPage() {
           <li>✦ Um dos classificados na posição correta: <span className="font-semibold">10 pontos</span></li>
           <li>✦ Um dos classificados na posição errada: <span className="font-semibold">5 pontos</span></li>
         </ul>
+
+        <p className="text-sm text-gray-700 mt-5 mb-3 font-medium">
+          Pontuação Extra dos <span className="underline">colocados finais</span>:
+        </p>
+        <p className="text-xs text-gray-500 mb-2">
+          A pontuação só vale para posição exata. Time em posição diferente não pontua.
+        </p>
+        <ul className="space-y-1.5 text-sm text-gray-700 ml-3">
+          <li>✦ Campeão + Vice + 3º lugar corretos: <span className="font-semibold">50 pontos</span></li>
+          <li>✦ Campeão + Vice corretos: <span className="font-semibold">45 pontos</span></li>
+          <li>✦ Campeão + 3º lugar corretos: <span className="font-semibold">35 pontos</span></li>
+          <li>✦ Campeão correto: <span className="font-semibold">30 pontos</span></li>
+          <li>✦ Vice + 3º lugar corretos: <span className="font-semibold">20 pontos</span></li>
+          <li>✦ Vice correto: <span className="font-semibold">15 pontos</span></li>
+          <li>✦ 3º lugar correto: <span className="font-semibold">5 pontos</span></li>
+        </ul>
       </section>
 
       {/* Premiação */}
       <section className="modern-card p-5 sm:p-6">
         <h2 className="text-base font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">Premiação</h2>
-        <ol className="space-y-3 text-sm text-gray-700 leading-relaxed list-none" start={11}>
-          <li><span className="font-semibold">11º</span> — O valor integral das inscrições será revertido na premiação.</li>
+        <ul className="space-y-3 text-sm text-gray-700 leading-relaxed list-disc ml-5">
+          <li>O valor integral das inscrições será revertido na premiação.</li>
           <li>
-            <span className="font-semibold">12º</span> — A distribuição do valor será feita da seguinte forma:
+            A distribuição do valor será feita da seguinte forma:
 
             <div className="mt-3 space-y-3 ml-2">
               <div>
@@ -140,19 +154,19 @@ export default function RegulamentoPage() {
               </div>
             </div>
           </li>
-        </ol>
+        </ul>
       </section>
 
       {/* Considerações */}
       <section className="modern-card p-5 sm:p-6">
         <h2 className="text-base font-bold text-gray-800 border-b border-gray-200 pb-2 mb-4">Considerações</h2>
-        <ol className="space-y-3 text-sm text-gray-700 leading-relaxed list-none" start={13}>
+        <ul className="space-y-3 text-sm text-gray-700 leading-relaxed list-disc ml-5">
           <li>
-            <span className="font-semibold">13º</span> — O desempate se dará pelo número de acertos do placar exato das partidas.
+            O desempate se dará pelo número de acertos do placar exato das partidas.
             Persistindo o empate, o desempate se dará pelo maior número de acertos do vencedor com número de gols de um time.
           </li>
           <li>
-            <span className="font-semibold">14º</span> — Caso seja de interesse do participante, o mesmo pode realizar mais de uma aposta,
+            Caso seja de interesse do participante, o mesmo pode realizar mais de uma aposta,
             mediante o pagamento de taxa extra de inscrição. O mesmo terá palpites computados de forma independente para cada inscrição,
             não sendo permitida a permuta de resultado por inscrição. Porém fica restrito ao participante o recebimento de apenas uma premiação.
             <br />
@@ -161,11 +175,11 @@ export default function RegulamentoPage() {
               será concedido o prêmio apenas para sua melhor posição.
             </span>
           </li>
-          <li><span className="font-semibold">15º</span> — No caso de imprevistos, o caso será apurado pelos organizadores.</li>
+          <li>No caso de imprevistos, o caso será apurado pelos organizadores.</li>
           <li>
-            <span className="font-semibold">16º</span> — Sugerimos que eventuais dúvidas sejam direcionadas antecipadamente para melhor organização do bolão.
+            Sugerimos que eventuais dúvidas sejam direcionadas antecipadamente para melhor organização do bolão.
           </li>
-        </ol>
+        </ul>
       </section>
     </div>
   )

@@ -46,6 +46,10 @@ export default function RodadaPage() {
   const [teamFilter, setTeamFilter] = useState('')
   const [groupFilter, setGroupFilter] = useState('all')
   const [dateFilter, setDateFilter] = useState('')
+  const [isFiltersOpen, setIsFiltersOpen] = useState(() => {
+    if (typeof window === 'undefined') return true
+    return window.innerWidth >= 768
+  })
   const autoSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const saveSequenceRef = useRef<Record<string, number>>({})
 
@@ -57,6 +61,17 @@ export default function RodadaPage() {
     return () => {
       Object.values(autoSaveTimersRef.current).forEach(timer => clearTimeout(timer))
     }
+  }, [])
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(min-width: 768px)')
+
+    function syncFiltersByBreakpoint(event: MediaQueryListEvent) {
+      setIsFiltersOpen(event.matches)
+    }
+
+    mediaQuery.addEventListener('change', syncFiltersByBreakpoint)
+    return () => mediaQuery.removeEventListener('change', syncFiltersByBreakpoint)
   }, [])
 
   async function loadData() {
@@ -71,7 +86,7 @@ export default function RodadaPage() {
 
     if (roundError) {
       console.error('[Rodada] load round error', roundError)
-      setErrorMsg('Nao foi possivel carregar a rodada.')
+      setErrorMsg('Nao conseguimos carregar a rodada. Tente novamente.')
       setLoading(false)
       return
     }
@@ -91,7 +106,7 @@ export default function RodadaPage() {
 
     if (matchError) {
       console.error('[Rodada] load matches error', matchError)
-      setErrorMsg('Nao foi possivel carregar os jogos desta rodada.')
+      setErrorMsg('Nao conseguimos carregar os jogos. Tente novamente.')
       setLoading(false)
       return
     }
@@ -107,7 +122,7 @@ export default function RodadaPage() {
 
     if (predError) {
       console.error('[Rodada] load predictions error', predError)
-      setErrorMsg('Jogos carregados, mas houve erro ao carregar palpites.')
+      setErrorMsg('Jogos carregados, mas nao conseguimos carregar seus palpites.')
     }
 
     const map: Record<string, Prediction> = {}
@@ -270,66 +285,78 @@ export default function RodadaPage() {
         <BackButton to={poolId ? `/bolao/${poolId}/palpites` : '/dashboard'} label="Meus Palpites" />
       </div>
 
-      <div className="modern-card fade-rise relative overflow-hidden px-4 py-3 sm:px-5 sm:py-4">
-        <div className="absolute -top-6 -right-6 h-20 w-20 rounded-full bg-sky-200/30 blur-2xl pointer-events-none" />
-        <div className="absolute -bottom-6 -left-6 h-16 w-16 rounded-full bg-emerald-200/30 blur-2xl pointer-events-none" />
-
-        <div className="relative z-10 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex flex-col gap-0.5">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-gray-400">Fase de grupos</span>
-            <h1 className="text-lg font-extrabold tracking-tight text-gray-800 leading-tight">{roundName}</h1>
-            <p className="text-xs text-gray-400 mt-0.5">Palpites fecham individualmente 2h antes de cada jogo</p>
-          </div>
-
-          <div className="flex items-center gap-3">
-            <div className="flex flex-col items-center rounded-xl border border-slate-200 bg-white px-4 py-2 shadow-sm">
-              <span className="text-xl font-extrabold text-gray-800 leading-none">
-                {submittedPredictionsCount}
-                <span className="text-sm font-semibold text-gray-400"> / {matches.length}</span>
+      <section className="relative px-0.5 py-0.5">
+        <div className="border-b border-slate-200 pb-1.5">
+          <div className="flex items-center justify-between gap-3">
+            <div className="inline-flex items-center gap-2">
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-gradient-to-br from-brand-500 to-sky-500 text-white shadow-sm">
+                <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <polyline points="12 6 12 12 16 14" />
+                </svg>
               </span>
-              <span className="text-[10px] font-semibold uppercase tracking-wider text-gray-400 mt-0.5">Palpites</span>
+              <h1 className="text-lg sm:text-xl font-black tracking-tight text-slate-800 leading-tight">{roundName}</h1>
+            </div>
+            <div className="inline-flex flex-col items-center rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 shadow-sm">
+              <span className="text-base font-black text-slate-800 leading-none">{submittedPredictionsCount}<span className="text-xs font-semibold text-slate-400"> / {matches.length}</span></span>
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Palpites</span>
             </div>
           </div>
+          <p className="mt-0.5 text-[11px] sm:text-xs text-slate-600">Palpites fecham 2h antes de cada jogo</p>
         </div>
-      </div>
+      </section>
 
       <div className="modern-card px-4 py-2.5 sm:px-5 sm:py-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
-          <label className="flex flex-col gap-0.5 text-xs text-gray-600">
-            Time
-            <input
-              type="text"
-              value={teamFilter}
-              onChange={e => setTeamFilter(e.target.value)}
-              placeholder="Digite para filtrar por time"
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </label>
+        <button
+          type="button"
+          onClick={() => setIsFiltersOpen(prev => !prev)}
+          className="w-full flex items-center justify-between gap-2 py-1 text-left"
+          aria-expanded={isFiltersOpen}
+        >
+          <span className="text-[10px] font-bold uppercase tracking-wide text-gray-600">Filtros</span>
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-md border border-slate-200 bg-white text-[10px] text-slate-600">
+            {isFiltersOpen ? '▾' : '▸'}
+          </span>
+        </button>
 
-          <label className="flex flex-col gap-0.5 text-xs text-gray-600">
-            Grupo
-            <select
-              value={groupFilter}
-              onChange={e => setGroupFilter(e.target.value)}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
-            >
-              <option value="all">Todos</option>
-              {groupOptions.map(code => (
-                <option key={code} value={code}>Grupo {code}</option>
-              ))}
-            </select>
-          </label>
+        {isFiltersOpen && (
+          <div className="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            <label className="flex flex-col gap-0.5 text-xs text-gray-600">
+              Time
+              <input
+                type="text"
+                value={teamFilter}
+                onChange={e => setTeamFilter(e.target.value)}
+                placeholder="Digite para filtrar por time"
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </label>
 
-          <label className="flex flex-col gap-0.5 text-xs text-gray-600">
-            Data
-            <input
-              type="date"
-              value={dateFilter}
-              onChange={e => setDateFilter(e.target.value)}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
-          </label>
-        </div>
+            <label className="flex flex-col gap-0.5 text-xs text-gray-600">
+              Grupo
+              <select
+                value={groupFilter}
+                onChange={e => setGroupFilter(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs bg-white focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="all">Todos</option>
+                {groupOptions.map(code => (
+                  <option key={code} value={code}>Grupo {code}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-0.5 text-xs text-gray-600">
+              Data
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={e => setDateFilter(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </label>
+          </div>
+        )}
       </div>
 
       {loading ? (
@@ -375,7 +402,7 @@ export default function RodadaPage() {
                         : 'border border-slate-200 bg-white'
 
                   return (
-                    <div key={m.id} className={`modern-card soft-hover p-4 sm:p-5 relative ${cardStateClass}`}>
+                    <div key={m.id} className={`modern-card no-theme-tint soft-hover p-4 sm:p-5 relative ${cardStateClass}`}>
                       {isDraftSynced && !saving[m.id] && (
                         <span
                           aria-label="Palpite salvo"
@@ -395,43 +422,49 @@ export default function RodadaPage() {
                         </span>
                       </div>
                       {m.venue && <p className="text-[11px] text-center mb-1 text-gray-500">{m.venue}</p>}
-                      <div className="flex items-center justify-center gap-3">
-                        <TeamWithFlag
-                          name={m.home_team?.name}
-                          flagCode={m.home_team?.flag_code}
-                          size="xl"
-                          compact
-                          reverse
-                          align="right"
-                          className="flex-1 font-semibold text-gray-800 justify-end"
-                        />
-                        <input
-                          type="number"
-                          min={0}
-                          max={99}
-                          value={guessDrafts[m.id]?.home ?? ''}
-                          onChange={e => updateDraft(m.id, 'home', e.target.value)}
-                          disabled={isMatchLocked || saving[m.id]}
-                          className="w-12 text-center border border-gray-300 rounded px-1 py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100 disabled:text-gray-400"
-                        />
-                        <span className="text-gray-400 font-bold">×</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={99}
-                          value={guessDrafts[m.id]?.away ?? ''}
-                          onChange={e => updateDraft(m.id, 'away', e.target.value)}
-                          disabled={isMatchLocked || saving[m.id]}
-                          className="w-12 text-center border border-gray-300 rounded px-1 py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100 disabled:text-gray-400"
-                        />
-                        <TeamWithFlag
-                          name={m.away_team?.name}
-                          flagCode={m.away_team?.flag_code}
-                          size="xl"
-                          compact
-                          align="left"
-                          className="flex-1 font-semibold text-gray-800"
-                        />
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="min-w-0 flex-1 flex justify-end">
+                          <TeamWithFlag
+                            name={m.home_team?.name}
+                            flagCode={m.home_team?.flag_code}
+                            size="sm"
+                            compact
+                            reverse
+                            align="right"
+                            className="font-semibold text-gray-800 justify-end truncate"
+                          />
+                        </div>
+                        <div className="flex shrink-0 items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={99}
+                            value={guessDrafts[m.id]?.home ?? ''}
+                            onChange={e => updateDraft(m.id, 'home', e.target.value)}
+                            disabled={isMatchLocked || saving[m.id]}
+                            className="w-10 text-center border border-gray-300 rounded px-1 py-1.5 text-base font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100 disabled:text-gray-400"
+                          />
+                          <span className="text-gray-400 font-bold text-sm">×</span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={99}
+                            value={guessDrafts[m.id]?.away ?? ''}
+                            onChange={e => updateDraft(m.id, 'away', e.target.value)}
+                            disabled={isMatchLocked || saving[m.id]}
+                            className="w-10 text-center border border-gray-300 rounded px-1 py-1.5 text-base font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100 disabled:text-gray-400"
+                          />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <TeamWithFlag
+                            name={m.away_team?.name}
+                            flagCode={m.away_team?.flag_code}
+                            size="sm"
+                            compact
+                            align="left"
+                            className="font-semibold text-gray-800 truncate"
+                          />
+                        </div>
                       </div>
 
                       <p className="text-[11px] text-center mt-3 text-slate-600 font-semibold">

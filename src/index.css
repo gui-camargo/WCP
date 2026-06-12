@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -11,15 +12,25 @@
   body {
     @apply text-gray-900 min-h-screen;
     background:
-      radial-gradient(circle at 0% 0%, rgba(59,130,246,.18), transparent 40%),
-      radial-gradient(circle at 100% 100%, rgba(16,185,129,.16), transparent 38%),
+      radial-gradient(circle at 0% 0%, rgba(0,82,204,.12), transparent 40%),
+      radial-gradient(circle at 100% 100%, rgba(255,102,0,.1), transparent 38%),
       #f8fafc;
   }
 }
 
 @layer components {
   .modern-card {
-    @apply bg-white/85 backdrop-blur-sm border border-white/70 shadow-lg shadow-slate-200/60 rounded-2xl;
+    @apply bg-white/85 backdrop-blur-sm border border-white/70 shadow-lg shadow-slate-200/60 rounded-2xl relative overflow-hidden;
+  }
+
+  .modern-card::before {
+    content: '';
+    @apply absolute inset-0 pointer-events-none;
+    background: linear-gradient(135deg, rgba(0,82,204,0.055), rgba(255,102,0,0.04));
+  }
+
+  .modern-card.no-theme-tint::before {
+    content: none;
   }
 
   .modern-chip {

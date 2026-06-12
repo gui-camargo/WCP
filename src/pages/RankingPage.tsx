@@ -1,53 +1,89 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
+import BackButton from '@/components/BackButton'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { IconRanking } from '@/components/Icons'
 
 interface LeaderboardRow {
   user_id: string
   user_name: string
   total_points: number
   rank: number
+  c20?: number
+  c15?: number
+  c10?: number
+  c5?: number
+  c0?: number
 }
 
 export default function RankingPage() {
   const { poolId } = useParams()
   const { user } = useAuth()
   const [rows, setRows] = useState<LeaderboardRow[]>([])
-  const [poolName, setPoolName] = useState('')
+  const [nameFilterOpen, setNameFilterOpen] = useState(false)
+  const [nameFilter, setNameFilter] = useState('')
   const [loading, setLoading] = useState(true)
+  const nameFilterInputRef = useRef<HTMLInputElement | null>(null)
+
+  const filteredRows = useMemo(() => {
+    const query = nameFilter.trim().toLowerCase()
+    if (!query) return rows
+    return rows.filter(row => row.user_name.toLowerCase().includes(query))
+  }, [rows, nameFilter])
 
   useEffect(() => {
-    if (poolId) loadData()
+    if (nameFilterOpen) {
+      nameFilterInputRef.current?.focus()
+    }
+  }, [nameFilterOpen])
+
+  useEffect(() => {
+    if (poolId) void loadData()
   }, [poolId])
 
   async function loadData() {
     setLoading(true)
-    const { data: pool } = await supabase.from('pools').select('name').eq('id', poolId!).single()
-    setPoolName((pool as any)?.name ?? '')
+    await supabase.from('pools').select('name').eq('id', poolId!).single()
 
-    const { data } = await supabase
+    const { data: leaderboardData } = await supabase
       .from('leaderboard')
-      .select('*')
+      .select('user_id, user_name, total_points, rank, c20, c15, c10, c5, c0')
       .eq('pool_id', poolId!)
-      .order('rank')
+      .order('rank', { ascending: true })
+      .order('user_name', { ascending: true })
 
-    setRows(data ?? [])
+    setRows((leaderboardData ?? []) as LeaderboardRow[])
     setLoading(false)
+  }
+
+  function getPointsColor(points: number) {
+    if (points === 20) return 'text-yellow-600 bg-yellow-50 border-yellow-300'
+    if (points === 15) return 'text-emerald-700 bg-emerald-50 border-emerald-200'
+    if (points === 10) return 'text-indigo-700 bg-indigo-50 border-indigo-200'
+    if (points === 5) return 'text-orange-700 bg-orange-50 border-orange-200'
+    return 'text-red-700 bg-red-50 border-red-200'
   }
 
   const medals = ['🥇', '🥈', '🥉']
 
   return (
-    <div>
-      <div className="modern-card soft-hover fade-rise relative overflow-hidden p-5 sm:p-6 mb-6">
-        <div className="absolute -top-10 -right-12 h-28 w-28 rounded-full bg-sky-200/40 blur-2xl" />
-        <div className="absolute -bottom-10 -left-8 h-24 w-24 rounded-full bg-emerald-200/40 blur-2xl" />
-        <div className="relative z-10">
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-800">Ranking — {poolName}</h1>
-          <p className="text-sm text-gray-600 mt-2">Pontuação geral do bolão</p>
-        </div>
+    <div className="space-y-4">
+      <div>
+        <BackButton to={poolId ? `/bolao/${poolId}` : '/dashboard'} label="Voltar ao Bolão" />
       </div>
+
+      <section className="relative px-0.5 py-0.5">
+        <div className="border-b border-slate-200 pb-1.5">
+          <div className="inline-flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-blue-950 text-white flex-shrink-0">
+              <IconRanking className="w-4 h-4 sm:w-5 sm:h-5" />
+            </span>
+            <h1 className="text-lg sm:text-xl font-black tracking-tight text-slate-800 leading-tight">Ranking</h1>
+          </div>
+          <p className="mt-0.5 text-[11px] sm:text-xs text-slate-600">Posição dos participantes no bolão</p>
+        </div>
+      </section>
 
       {loading ? (
         <p className="text-gray-400 text-center py-10">Carregando...</p>
@@ -57,33 +93,101 @@ export default function RankingPage() {
           <p>Nenhuma pontuação ainda. Os palpites estão sendo aguardados!</p>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow overflow-hidden">
+        <div className="bg-white rounded-xl shadow overflow-auto">
           <table className="w-full text-sm">
-            <thead className="bg-brand-700 text-white">
+            <thead className="bg-brand-600 text-white">
               <tr>
-                <th className="px-4 py-3 text-left w-12">#</th>
-                <th className="px-4 py-3 text-left">Participante</th>
-                <th className="px-4 py-3 text-right">Pontos</th>
+                <th className="px-2 sm:px-4 py-3 text-center w-8 sm:w-12 align-middle text-sm sm:text-base">#</th>
+                <th className="px-4 py-3 text-left align-middle">
+                  <div className="flex flex-col gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNameFilterOpen(prev => !prev)}
+                      className="inline-flex items-center gap-2 text-left font-semibold hover:opacity-90"
+                      aria-label={nameFilterOpen ? 'Fechar filtro de participante' : 'Abrir filtro de participante'}
+                    >
+                      <span>Participante</span>
+                      <span className="inline-flex h-5 w-5 items-center justify-center rounded-md border border-white/30 bg-white/10" aria-hidden="true">
+                        {nameFilterOpen ? (
+                          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M18 6L6 18" />
+                            <path d="M6 6l12 12" />
+                          </svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="11" cy="11" r="7" />
+                            <path d="m20 20-3.5-3.5" />
+                          </svg>
+                        )}
+                      </span>
+                    </button>
+                    {nameFilterOpen && (
+                      <input
+                        ref={nameFilterInputRef}
+                        type="text"
+                        value={nameFilter}
+                        onChange={e => setNameFilter(e.target.value)}
+                        placeholder="Filtrar por nome"
+                        className="w-full rounded-md border border-white/40 bg-white px-2 py-1 text-xs text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-white/70"
+                      />
+                    )}
+                  </div>
+                </th>
+                <th className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]">
+                  <span className="inline-flex items-center gap-1 px-1 py-1 rounded border border-white border-opacity-25 bg-white bg-opacity-10">
+                    <span className="text-base sm:text-xl leading-none">🤩</span>
+                    <span className="ml-1 text-xs sm:text-lg font-semibold align-middle">20</span>
+                  </span>
+                </th>
+                <th className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]">
+                  <span className="inline-flex items-center gap-1 px-1 py-1 rounded border border-white border-opacity-25 bg-white bg-opacity-10">
+                    <span className="text-base sm:text-xl leading-none">😄</span>
+                    <span className="ml-1 text-xs sm:text-lg font-semibold align-middle">15</span>
+                  </span>
+                </th>
+                <th className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]">
+                  <span className="inline-flex items-center gap-1 px-1 py-1 rounded border border-white border-opacity-25 bg-white bg-opacity-10">
+                    <span className="text-base sm:text-xl leading-none">😐</span>
+                    <span className="ml-1 text-xs sm:text-lg font-semibold align-middle">10</span>
+                  </span>
+                </th>
+                <th className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]">
+                  <span className="inline-flex items-center gap-1 px-1 py-1 rounded border border-white border-opacity-25 bg-white bg-opacity-10">
+                    <span className="text-base sm:text-xl leading-none">😬</span>
+                    <span className="ml-1 text-xs sm:text-lg font-semibold align-middle">5</span>
+                  </span>
+                </th>
+                <th className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]">
+                  <span className="inline-flex items-center gap-1 px-1 py-1 rounded border border-white border-opacity-25 bg-white bg-opacity-10">
+                    <span className="text-base sm:text-xl leading-none">😵</span>
+                    <span className="ml-1 text-xs sm:text-lg font-semibold align-middle">0</span>
+                  </span>
+                </th>
+                <th className="px-4 py-3 text-right align-middle">Pontos</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {rows.map(row => {
-                const isMe = row.user_id === user?.id
-                return (
-                  <tr key={row.user_id} className={isMe ? 'bg-brand-50 font-semibold' : 'hover:bg-gray-50'}>
-                    <td className="px-4 py-3 text-center text-lg">
-                      {row.rank <= 3 ? medals[row.rank - 1] : row.rank}
-                    </td>
-                    <td className="px-4 py-3">
-                      {row.user_name}
-                      {isMe && <span className="ml-2 text-xs text-brand-600">(você)</span>}
-                    </td>
-                    <td className="px-4 py-3 text-right font-bold text-brand-700">
-                      {row.total_points}
-                    </td>
-                  </tr>
-                )
-              })}
+              {filteredRows.map(r => (
+                <tr key={r.user_id} className={r.user_id === user?.id ? 'bg-brand-50 font-semibold' : 'hover:bg-gray-50'}>
+                  <td className="px-2 sm:px-4 py-3 text-center text-sm sm:text-lg align-middle">{r.rank <= 3 ? <span className="text-xl sm:text-2xl leading-none">{medals[r.rank - 1]}</span> : <span className="text-sm">{r.rank}</span>}</td>
+                  <td className="px-4 py-3 align-middle">{r.user_name}{r.user_id === user?.id && <span title="Você" aria-label="Você (esta é a sua conta)" className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-brand-100 text-brand-700 border border-brand-200 shadow-sm">você</span>}</td>
+                  <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(20)}>{r.c20 ?? 0}</span></td>
+                  <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(15)}>{r.c15 ?? 0}</span></td>
+                  <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(10)}>{r.c10 ?? 0}</span></td>
+                  <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(5)}>{r.c5 ?? 0}</span></td>
+                  <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(0)}>{r.c0 ?? 0}</span></td>
+                  <td className="px-4 py-3 text-right font-bold text-brand-700 align-middle">
+                    <span className={'inline-flex items-center px-3 py-1 rounded-full font-bold text-lg sm:text-xl ' + (r.total_points >= 100 ? 'bg-accent-50 text-accent-700 border border-accent-200' : 'bg-white text-brand-700 border border-gray-100')}>{r.total_points}</span>
+                  </td>
+                </tr>
+              ))}
+              {filteredRows.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
+                    Nenhum participante encontrado para "{nameFilter}".
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>

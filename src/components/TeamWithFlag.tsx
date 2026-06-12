@@ -2,7 +2,7 @@ interface TeamWithFlagProps {
   name?: string | null
   flagCode?: string | null
   align?: 'left' | 'right' | 'center'
-  size?: 'sm' | 'md' | 'lg' | 'xl'
+  size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
   compact?: boolean
   stacked?: boolean
   reverse?: boolean
@@ -22,6 +22,7 @@ export default function TeamWithFlag({
   const alignItemsClass = align === 'right' ? 'items-end text-right' : align === 'center' ? 'items-center text-center' : 'items-start text-left'
   const code = (flagCode ?? '').trim().toLowerCase()
   const sizeMap = {
+    xs: { flag: 'h-3.5 w-5', text: 'text-[10px]', gap: 'gap-1' },
     sm: { flag: 'h-4 w-6', text: 'text-xs', gap: 'gap-1.5' },
     md: { flag: 'h-5 w-7', text: 'text-sm', gap: 'gap-2' },
     lg: { flag: 'h-6 w-9', text: 'text-base', gap: 'gap-2.5' },
@@ -40,8 +41,10 @@ export default function TeamWithFlag({
     <span className={`${current.flag} shrink-0 rounded bg-gray-100 border border-gray-200`} />
   )
 
+  const textAlignClass = align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left'
+
   const nameEl = (
-    <span className={`${stacked ? 'mt-1 max-w-[80px] whitespace-normal break-words leading-tight text-center text-[11px]' : 'min-w-0 whitespace-normal break-words leading-tight text-[11px]'}`}>
+    <span className={`${stacked ? `mt-1 max-w-[80px] whitespace-normal break-words leading-tight text-center ${current.text}` : `min-w-0 whitespace-normal break-words leading-tight ${textAlignClass} ${current.text}`}`}>
       {name ?? '-'}
     </span>
   )

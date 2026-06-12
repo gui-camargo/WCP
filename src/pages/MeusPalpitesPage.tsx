@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import BackButton from '@/components/BackButton'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { IconFinalStandings, IconGroupPhase, IconUpcomingMatches, IconEliminationPhase, IconMyPredictions } from '@/components/Icons'
 
 interface Round {
   id: string
@@ -29,11 +31,15 @@ export default function MeusPalpitesPage() {
   // removido: groupPeriod
   const [roundPeriods, setRoundPeriods] = useState<Record<string, { start: string | null; end: string | null }>>({})
   // removido: groupStatus
-  const [roundStatus, setRoundStatus] = useState<Record<string, string>>({})
   const [roundProgress, setRoundProgress] = useState<Record<string, { filled: number; total: number }>>({})
   const [groupClassificationProgress, setGroupClassificationProgress] = useState<{ filled: number; total: number }>({
     filled: 0,
     total: 0,
+  })
+  const [podiumDeadline, setPodiumDeadline] = useState<string | null>(null)
+  const [podiumProgress, setPodiumProgress] = useState<{ filled: number; total: number }>({
+    filled: 0,
+    total: 1,
   })
 
   useEffect(() => {
@@ -49,7 +55,7 @@ export default function MeusPalpitesPage() {
     const [{ data: poolData }, { data: roundsData }] = await Promise.all([
       supabase
         .from('pools')
-        .select('group_predictions_cutoff_at')
+        .select('group_predictions_cutoff_at, podium_predictions_cutoff_at')
         .eq('id', poolId)
         .single(),
       supabase
@@ -118,7 +124,6 @@ export default function MeusPalpitesPage() {
       nextRoundStatus[round.id] = status
     }
     setRoundPeriods(nextRoundPeriods)
-    setRoundStatus(nextRoundStatus)
 
     const totalByRound = matchesData.reduce<Record<string, number>>((acc, match) => {
       acc[match.round_id] = (acc[match.round_id] ?? 0) + 1
@@ -176,9 +181,23 @@ export default function MeusPalpitesPage() {
       total: groupIds.size,
     })
 
+    const { data: podiumData } = await supabase
+      .from('podium_predictions')
+      .select('champion_id, vice_id, third_id')
+      .eq('pool_id', poolId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    const podiumFilled = Boolean((podiumData as any)?.champion_id && (podiumData as any)?.vice_id && (podiumData as any)?.third_id)
+    setPodiumProgress({
+      filled: podiumFilled ? 1 : 0,
+      total: 1,
+    })
+
     const manualDeadline = (poolData as any)?.group_predictions_cutoff_at ?? null
     if (manualDeadline) {
       setSpecialDeadline(manualDeadline)
+      setPodiumDeadline(manualDeadline)
       setLoading(false)
       return
     }
@@ -191,8 +210,10 @@ export default function MeusPalpitesPage() {
         .sort((a, b) => new Date(a).getTime() - new Date(b).getTime())[0] ?? null
 
       setSpecialDeadline(firstCutoff)
+      setPodiumDeadline(firstCutoff)
     } else {
       setSpecialDeadline(null)
+      setPodiumDeadline(null)
     }
 
     setLoading(false)
@@ -211,86 +232,112 @@ export default function MeusPalpitesPage() {
     })
   }, [otherRounds])
 
+  const formatDateNoYear = (date: string) => {
+    const d = new Date(date)
+    const day = d.getDate().toString().padStart(2, '0')
+    const month = (d.getMonth() + 1).toString().padStart(2, '0')
+    return `${day}/${month}`
+  }
+
+  const progressBadge = (filled: number, total: number) => (
+    <span className={`inline-flex items-center rounded-full text-xs font-semibold px-2 py-0.5 ${filled === total && total > 0 ? 'bg-brand-100 text-brand-700' : 'bg-blue-50 text-blue-600'}`}>
+      {filled}/{total} palpites
+    </span>
+  )
+
   return (
     <div className="space-y-6">
-      <section className="modern-card soft-hover fade-rise relative overflow-hidden p-5 sm:p-6">
-        <div className="absolute -top-10 -right-10 h-32 w-32 rounded-full bg-sky-200/40 blur-2xl" />
-        <div className="absolute -bottom-10 -left-10 h-28 w-28 rounded-full bg-emerald-200/40 blur-2xl" />
+      <div>
+        <BackButton to={poolId ? `/bolao/${poolId}` : '/dashboard'} label="Voltar ao Bolão" />
+      </div>
 
-        <div className="relative z-10 flex flex-col gap-3">
-          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-gray-800">Meus Palpites</h1>
-          <p className="text-sm text-gray-600">Escolha o tipo de palpite e navegue por fase e rodada.</p>
-        </div>
-      </section>
-
-      <section className="modern-card p-4 sm:p-5 space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-gray-800">Palpite para Classificação de Grupos</h2>
-          <Link
-            to={poolId ? `/bolao/${poolId}/classificacao` : '/dashboard'}
-            className="inline-flex items-center px-3 py-2 rounded-xl bg-brand-600 text-white text-sm font-semibold hover:bg-brand-700 transition"
-          >
-            Abrir
-          </Link>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2 mt-2">
-          <span className="inline-flex items-center rounded-full bg-blue-100 text-blue-700 text-xs font-semibold px-2 py-1">
-            {groupClassificationProgress.filled} / {groupClassificationProgress.total} preenchidos
-          </span>
-          {specialDeadline && (
-            <span className="inline-flex items-center rounded-full bg-rose-100 text-rose-700 text-xs font-bold px-3 py-1 border border-rose-200">
-              Prazo: {(() => {
-                const d = new Date(specialDeadline)
-                const date = d.toLocaleDateString('pt-BR', { dateStyle: 'short' })
-                const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
-                return `${date} - ${time}`
-              })()}
+      <section className="relative px-0.5 py-0.5">
+        <div className="border-b border-slate-200 pb-1.5">
+          <div className="inline-flex items-center gap-2">
+            <span className="inline-flex items-center justify-center w-6 h-6 rounded-lg bg-blue-950 text-white flex-shrink-0">
+              <IconMyPredictions className="w-4 h-4 sm:w-5 sm:h-5" />
             </span>
-          )}
+            <h1 className="text-lg sm:text-xl font-black tracking-tight text-slate-800 leading-tight">Meus Palpites</h1>
+          </div>
+          <p className="mt-0.5 text-[11px] sm:text-xs text-slate-600">Navegue por tipo de palpite, fase e rodada.</p>
         </div>
-
-        <p className="text-sm text-gray-600">Escolha 1o e 2o colocados de cada grupo.</p>
-
-        {/* Nenhum texto de prazo, apenas selo acima */}
       </section>
 
-      <section className="modern-card p-4 sm:p-5 space-y-4">
-        <h2 className="text-lg font-bold text-gray-800">Palpite Fase de Grupos</h2>
+      {/* Palpites de classificacao */}
+      <section className="modern-card p-4 sm:p-5 space-y-3">
+        <h2 className="inline-flex items-center gap-1.5 text-sm font-bold text-gray-700 uppercase tracking-wide">
+          <IconFinalStandings className="w-4 h-4 text-blue-950" />
+          Palpites de Classificação
+        </h2>
+        {(specialDeadline ?? podiumDeadline) && (
+          <p className="text-xs text-gray-400">Prazo fecha em {(() => { const d = new Date(specialDeadline ?? podiumDeadline!); return `${d.toLocaleDateString('pt-BR', { dateStyle: 'short' })} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}` })()}</p>
+        )}
+        <Link
+          to={poolId ? `/bolao/${poolId}/classificacao` : '/dashboard'}
+          className="flex items-center justify-between rounded-xl border border-gray-300 bg-white px-4 py-3 hover:bg-slate-50 hover:border-gray-400 transition shadow-sm"
+        >
+          <div className="min-w-0 flex-1 flex items-center gap-2">
+            <IconGroupPhase className="w-4 h-4 text-slate-400 flex-shrink-0" />
+            <p className="text-xs font-semibold text-gray-800">Classificação de grupos (1º e 2º)</p>
+          </div>
+          <div className="flex items-center gap-2 ml-3 shrink-0">
+            {progressBadge(groupClassificationProgress.filled, groupClassificationProgress.total)}
+            <span className="text-gray-400 text-xl font-light">›</span>
+          </div>
+        </Link>
+        <Link
+          to={poolId ? `/bolao/${poolId}/colocados` : '/dashboard'}
+          className="flex items-center justify-between rounded-xl border border-gray-300 bg-white px-4 py-3 hover:bg-slate-50 hover:border-gray-400 transition shadow-sm"
+        >
+          <div className="min-w-0 flex-1 flex items-center gap-2">
+            <IconFinalStandings className="w-4 h-4 text-slate-400 flex-shrink-0" />
+            <p className="text-xs font-semibold text-gray-800">Colocados finais (Campeão, Vice e 3º Lugar)</p>
+          </div>
+          <div className="flex items-center gap-2 ml-3 shrink-0">
+            {progressBadge(podiumProgress.filled, podiumProgress.total)}
+            <span className="text-gray-400 text-xl font-light">›</span>
+          </div>
+        </Link>
+      </section>
 
+      {/* Fase de Grupos */}
+      <section className="modern-card p-4 sm:p-5 space-y-3">
+        <h2 className="inline-flex items-center gap-1.5 text-sm font-bold text-gray-700 uppercase tracking-wide">
+          <IconGroupPhase className="w-4 h-4 text-blue-950" />
+          Fase de Grupos
+        </h2>
+        <p className="text-xs text-gray-400">Prazo fecha 2 horas antes de cada partida.</p>
         {loading ? (
           <p className="text-sm text-gray-400">Carregando rodadas...</p>
         ) : groupRounds.length === 0 ? (
-          <p className="text-sm text-gray-400">Nenhuma rodada da fase de grupos cadastrada.</p>
+          <p className="text-sm text-gray-400">Nenhuma rodada cadastrada.</p>
         ) : (
           <div className="space-y-2">
             {groupRounds.map((round, index) => (
               <Link
                 key={round.id}
                 to={`/bolao/${poolId}/rodada/${round.id}`}
-                className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-3 py-2 hover:bg-slate-50 transition"
+                className="flex items-center justify-between rounded-xl border border-gray-300 bg-white pl-3 pr-6 py-4 hover:bg-slate-50 hover:border-gray-400 transition shadow-sm"
               >
-                <span className="text-sm text-gray-700">
-                  <span className="font-bold">Rodada {index + 1}</span>
+                <div className="min-w-0 flex-1 flex items-start gap-2">
+                  <IconUpcomingMatches className="w-4 h-4 text-slate-400 flex-shrink-0 mt-0.5" />
+                  <p className="text-xs font-semibold text-gray-800">
+                    Rodada {index + 1}
+                    {roundPeriods[round.id]?.start && roundPeriods[round.id]?.end && (
+                      <span className="hidden sm:inline text-xs font-normal text-gray-400 ml-2">
+                        {formatDateNoYear(roundPeriods[round.id].start!)}–{formatDateNoYear(roundPeriods[round.id].end!)}
+                      </span>
+                    )}
+                  </p>
                   {roundPeriods[round.id]?.start && roundPeriods[round.id]?.end && (
-                    <>
-                      {' '}-{' '}
-                      {`${new Date(roundPeriods[round.id].start!).toLocaleDateString('pt-BR', { dateStyle: 'short' })} até ${new Date(roundPeriods[round.id].end!).toLocaleDateString('pt-BR', { dateStyle: 'short' })}`}
-                    </>
+                    <p className="sm:hidden text-[10px] text-gray-400 mt-0.5">
+                      {formatDateNoYear(roundPeriods[round.id].start!)}–{formatDateNoYear(roundPeriods[round.id].end!)}
+                    </p>
                   )}
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700">
-                    {roundProgress[round.id]?.filled ?? 0} / {roundProgress[round.id]?.total ?? 0} preenchidos
-                  </span>
-                  <span className={`inline-flex items-center rounded-full text-xs font-semibold px-2 py-1 ${
-                    roundStatus[round.id] === 'Encerrada' ? 'bg-gray-200 text-gray-600' :
-                    roundStatus[round.id] === 'Em andamento' ? 'bg-yellow-100 text-yellow-800' :
-                    roundStatus[round.id] === 'Em aberto' ? 'bg-emerald-100 text-emerald-700' :
-                    'bg-slate-100 text-slate-700'
-                  }`}>
-                    {roundStatus[round.id]}
-                  </span>
+                </div>
+                <div className="flex items-center gap-2 ml-3 shrink-0">
+                  {progressBadge(roundProgress[round.id]?.filled ?? 0, roundProgress[round.id]?.total ?? 0)}
+                  <span className="text-gray-400 text-xl font-light">›</span>
                 </div>
               </Link>
             ))}
@@ -298,9 +345,12 @@ export default function MeusPalpitesPage() {
         )}
       </section>
 
-      <section className="modern-card p-4 sm:p-5 space-y-4">
-        <h2 className="text-lg font-bold text-gray-800">Palpite Outras Fases</h2>
-
+      {/* Outras Fases */}
+      <section className="modern-card p-4 sm:p-5 space-y-3">
+        <h2 className="inline-flex items-center gap-1.5 text-sm font-bold text-gray-700 uppercase tracking-wide">
+          <IconEliminationPhase className="w-4 h-4 text-blue-950" />
+          Fase Eliminatória
+        </h2>
         {loading ? (
           <p className="text-sm text-gray-400">Carregando fases...</p>
         ) : orderedOtherPhases.length === 0 ? (
@@ -308,25 +358,24 @@ export default function MeusPalpitesPage() {
         ) : (
           <div className="space-y-4">
             {orderedOtherPhases.map(phase => (
-              <div key={phase} className="rounded-xl border border-gray-100 bg-white p-3">
-                <h3 className="text-sm font-bold text-gray-700 mb-2">{PHASE_LABELS[phase] ?? phase}</h3>
-                <div className="space-y-2">
-                  {otherRounds[phase].map(round => (
-                    <Link
-                      key={round.id}
-                      to={`/bolao/${poolId}/rodada/${round.id}`}
-                      className="flex items-center justify-between rounded-lg border border-gray-100 bg-slate-50 px-3 py-2 hover:bg-slate-100 transition"
-                    >
-                      <span className="text-sm text-gray-700">{round.name}</span>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700">
-                          {roundProgress[round.id]?.filled ?? 0} / {roundProgress[round.id]?.total ?? 0} preenchidos
-                        </span>
-                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-slate-100 text-slate-700">Abrir</span>
-                      </div>
-                    </Link>
-                  ))}
-                </div>
+              <div key={phase} className="space-y-2">
+                <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest px-1">{PHASE_LABELS[phase] ?? phase}</h3>
+                {otherRounds[phase].map(round => (
+                  <Link
+                    key={round.id}
+                    to={`/bolao/${poolId}/rodada/${round.id}`}
+                    className="flex items-center justify-between rounded-xl border border-gray-300 bg-white pl-3 pr-6 py-4 hover:bg-slate-50 hover:border-gray-400 transition shadow-sm"
+                  >
+                    <div className="flex items-center gap-2 min-w-0 flex-1 truncate">
+                      <IconUpcomingMatches className="w-4 h-4 text-slate-400 flex-shrink-0" />
+                      <p className="text-xs font-semibold text-gray-800 min-w-0 truncate">{round.name}</p>
+                    </div>
+                    <div className="flex items-center gap-2 ml-3 shrink-0">
+                      {progressBadge(roundProgress[round.id]?.filled ?? 0, roundProgress[round.id]?.total ?? 0)}
+                      <span className="text-gray-400 text-xl font-light">›</span>
+                    </div>
+                  </Link>
+                ))}
               </div>
             ))}
           </div>

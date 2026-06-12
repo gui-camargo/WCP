@@ -12,6 +12,7 @@
 BEGIN;
 
 DELETE FROM public.group_predictions;
+DELETE FROM public.podium_predictions;
 DELETE FROM public.predictions;
 
 COMMIT;
@@ -24,6 +25,9 @@ COMMIT;
 -- BEGIN;
 --
 -- DELETE FROM public.group_predictions
+-- WHERE pool_id = '00000000-0000-0000-0000-000000000000';
+--
+-- DELETE FROM public.podium_predictions
 -- WHERE pool_id = '00000000-0000-0000-0000-000000000000';
 --
 -- DELETE FROM public.predictions
@@ -47,29 +51,29 @@ COMMIT;
 -- OPCAO D: limpar jogos encerrados de UM bolao especifico (apaga registros)
 -- Substitua o UUID abaixo pelo pool_id desejado.
 -- ============================================================
--- BEGIN;
---
--- DELETE FROM public.matches m
--- USING public.rounds r
--- WHERE m.round_id = r.id
---   AND r.pool_id = '00000000-0000-0000-0000-000000000000'
---   AND m.status = 'encerrado';
---
--- COMMIT;
+BEGIN;
+
+DELETE FROM public.matches m
+USING public.rounds r
+WHERE m.round_id = r.id
+  AND r.pool_id = '00000000-0000-0000-0000-000000000000'
+  AND m.status = 'encerrado';
+
+COMMIT;
 
 
 -- ============================================================
 -- OPCAO E: reabrir jogos encerrados (nao apaga; zera placar e status)
 -- ============================================================
--- BEGIN;
---
--- UPDATE public.matches
--- SET home_score = NULL,
---     away_score = NULL,
---     status = 'pendente'
--- WHERE status = 'encerrado';
---
--- COMMIT;
+BEGIN;
+
+UPDATE public.matches
+SET home_score = NULL,
+    away_score = NULL,
+    status = 'pendente'
+WHERE status = 'encerrado';
+
+COMMIT;
 
 
 -- ============================================================
@@ -95,4 +99,5 @@ COMMIT;
 -- ============================================================
 -- SELECT COUNT(*) AS predictions_count FROM public.predictions;
 -- SELECT COUNT(*) AS group_predictions_count FROM public.group_predictions;
+-- SELECT COUNT(*) AS podium_predictions_count FROM public.podium_predictions;
 -- SELECT COUNT(*) AS closed_matches_count FROM public.matches WHERE status = 'encerrado';

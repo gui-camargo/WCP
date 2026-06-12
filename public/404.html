@@ -1,0 +1,27 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>wcp</title>
+    <script>
+      // Redirect unknown GitHub Pages paths to index.html preserving route details.
+      ;(function () {
+        var segmentCount = 1 // repo name: /WCP
+        var l = window.location
+        var origin = l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '')
+        var repoBase = l.pathname.split('/').slice(0, 1 + segmentCount).join('/')
+        var route = l.pathname
+          .slice(1)
+          .split('/')
+          .slice(segmentCount)
+          .join('/')
+          .replace(/&/g, '~and~')
+
+        var query = l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : ''
+        var target = origin + repoBase + '/?/' + route + query + l.hash
+        l.replace(target)
+      })()
+    </script>
+  </head>
+  <body></body>
+</html>

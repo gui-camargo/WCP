@@ -10,6 +10,8 @@ interface Profile {
   active_pool_id: string | null
 }
 
+type PoolPaymentStatus = 'pendente' | 'confirmado' | 'rejeitado' | 'nao_encontrado'
+
 interface AuthContextType {
   session: Session | null
   user: User | null
@@ -17,7 +19,11 @@ interface AuthContextType {
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signUp: (email: string, password: string, name: string) => Promise<{ error: string | null }>
+  resetPasswordForEmail: (email: string) => Promise<{ error: string | null }>
+  updatePassword: (newPassword: string) => Promise<{ error: string | null }>
   setActivePool: (poolId: string | null) => Promise<{ error: string | null }>
+  getPoolPaymentStatus: (poolId: string) => Promise<PoolPaymentStatus>
+  refreshPoolPaymentStatus: (poolId: string) => Promise<PoolPaymentStatus>
   signOut: () => Promise<void>
 }
 
@@ -27,7 +33,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [paymentStatusByPool, setPaymentStatusByPool] = useState<Record<string, PoolPaymentStatus>>({})
   const [loading, setLoading] = useState(true)
+
+  async function fetchPoolPaymentStatus(poolId: string): Promise<PoolPaymentStatus> {
+    if (!user) return 'nao_encontrado'
+    if (profile?.is_admin) return 'confirmado'
+
+    const { data, error } = await (supabase
+      .from('payments') as any)
+      .select('status')
+      .eq('pool_id', poolId)
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (error) {
+      console.error('[Auth] fetchPoolPaymentStatus:error', {
+        poolId,
+        userId: user.id,
+        message: error.message,
+      })
+      return 'nao_encontrado'
+    }
+
+    const status = (data?.status as PoolPaymentStatus | undefined) ?? 'nao_encontrado'
+    return status
+  }
 
   async function loadProfile(userId: string) {
     console.info('[Auth] loadProfile:start', { userId })
@@ -65,7 +96,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session)
       setUser(session?.user ?? null)
       if (session?.user) loadProfile(session.user.id)
-      else setProfile(null)
+      else {
+        setProfile(null)
+        setPaymentStatusByPool({})
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -149,12 +183,74 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { error: null }
   }
 
+  async function refreshPoolPaymentStatus(poolId: string) {
+    const status = await fetchPoolPaymentStatus(poolId)
+    setPaymentStatusByPool(prev => ({ ...prev, [poolId]: status }))
+    return status
+  }
+
+  async function getPoolPaymentStatus(poolId: string) {
+    const cached = paymentStatusByPool[poolId]
+    if (cached) return cached
+    return refreshPoolPaymentStatus(poolId)
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
   }
 
+  async function resetPasswordForEmail(email: string) {
+    console.info('[Auth] resetPasswordForEmail:start', { email })
+
+    const redirectUrl = `${window.location.origin}${import.meta.env.BASE_URL}reset-senha`
+
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectUrl,
+    })
+
+    if (error) {
+      console.error('[Auth] resetPasswordForEmail:error', {
+        email,
+        message: error.message,
+      })
+      return { error: error.message }
+    }
+
+    console.info('[Auth] resetPasswordForEmail:success', { email })
+    return { error: null }
+  }
+
+  async function updatePassword(newPassword: string) {
+    console.info('[Auth] updatePassword:start')
+
+    const { error } = await supabase.auth.updateUser({ password: newPassword })
+
+    if (error) {
+      console.error('[Auth] updatePassword:error', {
+        message: error.message,
+      })
+      return { error: error.message }
+    }
+
+    console.info('[Auth] updatePassword:success')
+    return { error: null }
+  }
+
   return (
-    <AuthContext.Provider value={{ session, user, profile, loading, signIn, signUp, setActivePool, signOut }}>
+    <AuthContext.Provider value={{
+      session,
+      user,
+      profile,
+      loading,
+      signIn,
+      signUp,
+      resetPasswordForEmail,
+      updatePassword,
+      setActivePool,
+      getPoolPaymentStatus,
+      refreshPoolPaymentStatus,
+      signOut,
+    }}>
       {children}
     </AuthContext.Provider>
   )
