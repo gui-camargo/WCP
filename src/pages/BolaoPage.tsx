@@ -104,8 +104,6 @@ export default function BolaoPage() {
   async function loadData() {
     setLoading(true)
 
-    const now = new Date()
-
     const { data: pool } = await supabase.from('pools').select('name').eq('id', poolId!).single()
     setPoolName((pool as any)?.name ?? '')
 
@@ -174,7 +172,6 @@ export default function BolaoPage() {
           .from('matches')
           .select(matchSelect)
           .in('round_id', roundIds)
-          .gte('kickoff_at', now.toISOString())
           .neq('status', 'encerrado')
           .order('kickoff_at', { ascending: true })
           .limit(3),
@@ -212,14 +209,20 @@ export default function BolaoPage() {
 
   function dayLabel(kickoffAt: string): { label: string; className: string } {
     const now = new Date()
+    const kickoffDate = new Date(kickoffAt)
+
+    if (kickoffDate <= now) {
+      return { label: '🔴 Em Andamento', className: 'bg-red-100 text-red-700' }
+    }
+
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const tomorrow = new Date(today)
     tomorrow.setDate(tomorrow.getDate() + 1)
-    const matchDay = new Date(new Date(kickoffAt).getFullYear(), new Date(kickoffAt).getMonth(), new Date(kickoffAt).getDate())
-    const time = new Date(kickoffAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+    const matchDay = new Date(kickoffDate.getFullYear(), kickoffDate.getMonth(), kickoffDate.getDate())
+    const time = kickoffDate.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
     if (matchDay.getTime() === today.getTime()) return { label: `HOJE · ${time}`, className: 'bg-emerald-100 text-emerald-700' }
     if (matchDay.getTime() === tomorrow.getTime()) return { label: `Amanhã · ${time}`, className: 'bg-sky-100 text-sky-700' }
-    const date = new Date(kickoffAt).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
+    const date = kickoffDate.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
     return { label: `${date} · ${time}`, className: 'bg-gray-100 text-gray-600' }
   }
 
