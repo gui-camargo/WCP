@@ -57,14 +57,32 @@ export interface Database {
           id: string; round_id: string; group_id: string | null
           home_team_id: string; away_team_id: string
           home_score: number | null; away_score: number | null
-          kickoff_at: string; venue: string; cutoff_at: string; status: 'pendente' | 'encerrado'
+          kickoff_at: string; venue: string; cutoff_at: string
+          status: 'pendente' | 'ao_vivo' | 'encerrado'
+          external_match_id: number | null
+          home_win_pct: number | null
+          draw_pct: number | null
+          away_win_pct: number | null
         }
         Insert: {
           round_id: string; group_id?: string
           home_team_id: string; away_team_id: string
-          kickoff_at: string; venue?: string; cutoff_at?: string; status?: 'pendente' | 'encerrado'
+          kickoff_at: string; venue?: string; cutoff_at?: string
+          status?: 'pendente' | 'ao_vivo' | 'encerrado'
+          external_match_id?: number | null
+          home_win_pct?: number | null
+          draw_pct?: number | null
+          away_win_pct?: number | null
         }
-        Update: { home_score?: number; away_score?: number; kickoff_at?: string; venue?: string; cutoff_at?: string; status?: string }
+        Update: {
+          home_score?: number | null; away_score?: number | null
+          kickoff_at?: string; venue?: string; cutoff_at?: string
+          status?: 'pendente' | 'ao_vivo' | 'encerrado'
+          external_match_id?: number | null
+          home_win_pct?: number | null
+          draw_pct?: number | null
+          away_win_pct?: number | null
+        }
       }
       predictions: {
         Row: {

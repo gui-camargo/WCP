@@ -131,6 +131,8 @@ export default function AdminPage() {
   const [loadingPredictions, setLoadingPredictions] = useState<Record<string, boolean>>({})
   const [openSnapshotMatch, setOpenSnapshotMatch] = useState<string | null>(null)
   const [exportingImage, setExportingImage] = useState(false)
+  const [syncingExternalIds, setSyncingExternalIds] = useState(false)
+  const [syncExternalIdsResult, setSyncExternalIdsResult] = useState<string | null>(null)
 
   const paidMembersCount = paymentRows.filter(p => p.status === 'confirmado').length
   const pendingMembersCount = paymentRows.filter(p => p.status !== 'confirmado').length
@@ -216,7 +218,7 @@ export default function AdminPage() {
     if (nextRounds.length === 0) {
       setSelectedRoundId('')
     } else if (!selectedRoundId || !nextRounds.some(r => r.id === selectedRoundId)) {
-      setSelectedRoundId(nextRounds[nextRounds.length - 1].id)
+      setSelectedRoundId(nextRounds[0].id)
     }
 
     await loadGroupStandings(nextRounds)
@@ -430,7 +432,7 @@ export default function AdminPage() {
       const group = (row as any).group
       const groupId = (row as any).group_id
       if (!groupId || !group) continue
-      const current = groupMap.get(groupId) ?? { id: group.id, code: group.code, teams: [] }
+      const current = groupMap.get(groupId) ?? { id: group.id, code: group.code, teams: [] as GroupSection['teams'] }
 
       const homeTeam = (row as any).home_team
       const awayTeam = (row as any).away_team
@@ -632,6 +634,21 @@ export default function AdminPage() {
     setAddingMember(false)
   }
 
+  async function syncExternalIds() {
+    setSyncingExternalIds(true)
+    setSyncExternalIdsResult(null)
+    const { data, error } = await supabase.functions.invoke('map-external-ids')
+    if (error) {
+      setSyncExternalIdsResult(`Erro: ${error.message}`)
+    } else if (data.mapped === 0) {
+      const detail = [data.message, data.error ? JSON.stringify(data.error) : null].filter(Boolean).join(' | ')
+      setSyncExternalIdsResult(`0 de ${data.total ?? '?'} partidas vinculadas. ${detail}`)
+    } else {
+      setSyncExternalIdsResult(`${data.mapped} de ${data.total} partidas vinculadas.`)
+    }
+    setSyncingExternalIds(false)
+  }
+
   async function addRound() {
     if (!newRound.name) return
     setAddingRound(true)
@@ -670,6 +687,33 @@ export default function AdminPage() {
     const away = Number.parseInt(draft.away, 10)
     if (!Number.isInteger(home) || !Number.isInteger(away) || home < 0 || away < 0) return null
     return { home, away }
+  }
+
+  async function saveCutoff(matchId: string) {
+    const cutoffDraft = resultDrafts[matchId]?.cutoffAt ?? ''
+    if (!cutoffDraft) {
+      setMatchMessage(prev => ({ ...prev, [matchId]: 'Preencha uma data valida.' }))
+      return
+    }
+
+    setSavingMatch(prev => ({ ...prev, [matchId]: true }))
+    setMatchMessage(prev => ({ ...prev, [matchId]: '' }))
+
+    const parsedDate = new Date(cutoffDraft)
+    const cutoffAt = Number.isNaN(parsedDate.getTime()) ? null : parsedDate.toISOString()
+
+    const { error } = await (supabase.from('matches') as any)
+      .update({ cutoff_at: cutoffAt })
+      .eq('id', matchId)
+
+    if (error) {
+      setMatchMessage(prev => ({ ...prev, [matchId]: 'Nao conseguimos atualizar o cutoff. Tente novamente.' }))
+    } else {
+      setMatchMessage(prev => ({ ...prev, [matchId]: 'Cutoff atualizado com sucesso!' }))
+      if (selectedRoundId) loadMatches(selectedRoundId)
+    }
+
+    setSavingMatch(prev => ({ ...prev, [matchId]: false }))
   }
 
   async function closeMatch(matchId: string) {
@@ -737,19 +781,11 @@ export default function AdminPage() {
 
     setLoadingPredictions(prev => ({ ...prev, [matchId]: true }))
 
-    // Tenta primeiro sem join com profiles
     const { data: predictionsData, error: predictionsError } = await (supabase
       .from('predictions') as any)
-      .select(`
-        user_id,
-        home_guess,
-        away_guess,
-        points
-      `)
+      .select(`user_id, home_guess, away_guess, points`)
       .eq('match_id', matchId)
       .eq('pool_id', poolId)
-
-    console.log('[Admin] loadPredictions:first query', { predictionsError, count: predictionsData?.length })
 
     if (predictionsError) {
       console.error('[Admin] loadPredictions:error', { message: predictionsError.message })
@@ -757,28 +793,37 @@ export default function AdminPage() {
       return
     }
 
-    // Se temos dados, agora busca os nomes dos usuários
+    const allMemberIds = members.map(m => m.user_id)
+    const allUserIds = Array.from(new Set([
+      ...(predictionsData ?? []).map((p: any) => p.user_id),
+      ...allMemberIds,
+    ]))
+
     let userNames: Record<string, string> = {}
-    if (predictionsData && predictionsData.length > 0) {
-      const userIds = predictionsData.map((p: any) => p.user_id)
+    if (allUserIds.length > 0) {
       const { data: profilesData } = await supabase
         .from('profiles')
         .select('id, name')
-        .in('id', userIds)
+        .in('id', allUserIds)
 
       userNames = Object.fromEntries(
         (profilesData ?? []).map((p: any) => [p.id, p.name])
       )
-      console.log('[Admin] loadPredictions:profiles', { userNames })
     }
 
-    const predictions: Prediction[] = (predictionsData ?? []).map((row: any) => ({
-      user_id: row.user_id,
-      user_name: userNames[row.user_id] ?? 'Sem nome',
-      home_guess: row.home_guess,
-      away_guess: row.away_guess,
-      points: row.points,
-    }))
+    const predByUser = new Map<string, any>((predictionsData ?? []).map((p: any) => [p.user_id, p]))
+
+    const predictions: Prediction[] = allMemberIds.map((userId) => {
+      const pred = predByUser.get(userId)
+      const memberName = members.find(m => m.user_id === userId)?.name
+      return {
+        user_id: userId,
+        user_name: userNames[userId] ?? memberName ?? 'Sem nome',
+        home_guess: pred?.home_guess ?? 0,
+        away_guess: pred?.away_guess ?? 0,
+        points: pred?.points ?? null,
+      }
+    })
 
     setPredictionsByMatch(prev => ({
       ...prev,
@@ -1180,6 +1225,23 @@ export default function AdminPage() {
       {/* Rodadas */}
       {activeTab === 'jogos' && (
       <section>
+        <div className="modern-card p-4 mb-4">
+          <h2 className="text-sm font-bold text-gray-700 mb-1">API-Football</h2>
+          <p className="text-xs text-gray-500 mb-3">Vincula automaticamente as partidas do banco com os IDs da API-Football (por nome dos times + horário). Execute uma vez por fase.</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={syncExternalIds}
+              disabled={syncingExternalIds}
+              className="bg-slate-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-50"
+            >
+              {syncingExternalIds ? 'Sincronizando...' : 'Sincronizar IDs externos'}
+            </button>
+            {syncExternalIdsResult && (
+              <span className="text-sm text-gray-600">{syncExternalIdsResult}</span>
+            )}
+          </div>
+        </div>
+
         <h2 className="text-lg font-bold text-gray-700 mb-3 border-b border-gray-200 pb-2">Rodadas</h2>
         <div className="modern-card p-4 mb-4 grid sm:grid-cols-3 gap-3">
           <input
@@ -1284,7 +1346,7 @@ export default function AdminPage() {
         ) : filteredMatches.length === 0 ? (
           <p className="text-gray-400 text-center py-8">Nenhum jogo encontrado para os filtros selecionados.</p>
         ) : (
-          <div className="space-y-3">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
             {filteredMatches.map(m => (
               <div key={m.id} className="modern-card soft-hover p-4">
                 {/** Partida encerrada fica bloqueada ate ser reaberta. */}
@@ -1292,64 +1354,68 @@ export default function AdminPage() {
                   const isMatchLocked = m.status === 'encerrado' || Boolean(savingMatch[m.id])
                   return (
                     <>
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center flex-wrap gap-2">
-                          <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700">
+                      <div className="flex items-center justify-between mb-3 gap-3">
+                        <div className="flex flex-col gap-0.5">
+                          <span className="text-[11px] font-semibold px-2 py-1 rounded-full bg-blue-100 text-blue-700 w-fit">
                             Grupo {m.group?.code ?? '-'}
                           </span>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5 flex-1">
                           <p className="text-xs text-gray-400">
-                            {new Date(m.kickoff_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                            {new Date(m.kickoff_at).toLocaleString('pt-BR', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                           </p>
                           {m.venue && (
                             <p className="text-xs text-gray-400">
                               {m.venue}
                             </p>
                           )}
-                          <p className="text-xs text-gray-400">
-                            Fecha: {new Date(m.cutoff_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
-                          </p>
                         </div>
                         <span className={`text-xs font-semibold px-2 py-1 rounded-full ${m.status === 'encerrado' ? 'bg-gray-100 text-gray-600' : 'bg-yellow-100 text-yellow-700'}`}>
                           {m.status === 'encerrado' ? 'Encerrado' : 'Pendente'}
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-center gap-3">
-                        <TeamWithFlag
-                          name={m.home_team?.name}
-                          flagCode={m.home_team?.flag_code}
-                          size="sm"
-                          compact
-                          align="right"
-                          className="flex-1 text-right font-semibold text-gray-800"
-                        />
-                        <input
-                          type="number"
-                          min={0}
-                          max={99}
-                          value={resultDrafts[m.id]?.home ?? ''}
-                          onChange={e => updateDraft(m.id, 'home', e.target.value)}
-                          disabled={isMatchLocked}
-                          className="w-12 text-center border border-gray-300 rounded px-1 py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100"
-                        />
+                      <div className="flex items-center justify-center gap-2">
+                        <div className="flex-1 flex justify-end items-center gap-1">
+                          <TeamWithFlag
+                            name={m.home_team?.name}
+                            flagCode={m.home_team?.flag_code}
+                            size="sm"
+                            compact
+                            reverse
+                            align="right"
+                            className="font-semibold text-gray-800"
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            max={99}
+                            value={resultDrafts[m.id]?.home ?? ''}
+                            onChange={e => updateDraft(m.id, 'home', e.target.value)}
+                            disabled={isMatchLocked}
+                            className="w-12 text-center border border-gray-300 rounded px-1 py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100"
+                          />
+                        </div>
                         <span className="text-gray-400 font-bold">×</span>
-                        <input
-                          type="number"
-                          min={0}
-                          max={99}
-                          value={resultDrafts[m.id]?.away ?? ''}
-                          onChange={e => updateDraft(m.id, 'away', e.target.value)}
-                          disabled={isMatchLocked}
-                          className="w-12 text-center border border-gray-300 rounded px-1 py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100"
-                        />
-                        <TeamWithFlag
-                          name={m.away_team?.name}
-                          flagCode={m.away_team?.flag_code}
-                          size="sm"
-                          compact
-                          align="left"
-                          className="flex-1 text-left font-semibold text-gray-800"
-                        />
+                        <div className="flex-1 flex justify-start items-center gap-1">
+                          <input
+                            type="number"
+                            min={0}
+                            max={99}
+                            value={resultDrafts[m.id]?.away ?? ''}
+                            onChange={e => updateDraft(m.id, 'away', e.target.value)}
+                            disabled={isMatchLocked}
+                            className="w-12 text-center border border-gray-300 rounded px-1 py-1.5 text-lg font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100"
+                          />
+                          <TeamWithFlag
+                            name={m.away_team?.name}
+                            flagCode={m.away_team?.flag_code}
+                            size="sm"
+                            compact
+                            align="left"
+                            className="font-semibold text-gray-800"
+                          />
+                        </div>
                       </div>
 
                       <div className="mt-3 flex items-center justify-center gap-2">
@@ -1361,6 +1427,13 @@ export default function AdminPage() {
                           disabled={isMatchLocked}
                           className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100"
                         />
+                        <button
+                          onClick={() => saveCutoff(m.id)}
+                          disabled={isMatchLocked}
+                          className="bg-green-600 hover:bg-green-700 text-white text-xs font-semibold px-2 py-1 rounded-lg disabled:opacity-50 transition"
+                        >
+                          {savingMatch[m.id] ? '...' : 'Salvar'}
+                        </button>
                       </div>
 
                       <div className="mt-3 flex items-center justify-center gap-2">
@@ -1378,7 +1451,7 @@ export default function AdminPage() {
                             disabled={Boolean(savingMatch[m.id])}
                             className="bg-gray-700 hover:bg-gray-800 text-white text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition"
                           >
-                            {savingMatch[m.id] ? 'Encerrando...' : 'Encerrar Partida (salva e calcula)'}
+                            {savingMatch[m.id] ? 'Encerrando...' : 'Encerrar Partida'}
                           </button>
                         )}
 
@@ -1387,7 +1460,7 @@ export default function AdminPage() {
                           disabled={Boolean(loadingPredictions[m.id])}
                           className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition"
                         >
-                          {loadingPredictions[m.id] ? 'Carregando...' : '🖼️ Ver Snapshot'}
+                          {loadingPredictions[m.id] ? 'Carregando...' : '🖼️ Snapshot'}
                         </button>
                       </div>
 
@@ -1429,10 +1502,10 @@ export default function AdminPage() {
                 <>
                   <SnapshotPredictions
                     matchId={match.id}
-                    homeTeamName={match.home_team?.name}
-                    homeTeamFlagCode={match.home_team?.flag_code}
-                    awayTeamName={match.away_team?.name}
-                    awayTeamFlagCode={match.away_team?.flag_code}
+                    homeTeamName={match.home_team?.name ?? null}
+                    homeTeamFlagCode={match.home_team?.flag_code ?? null}
+                    awayTeamName={match.away_team?.name ?? null}
+                    awayTeamFlagCode={match.away_team?.flag_code ?? null}
                     homeScore={match.home_score}
                     awayScore={match.away_score}
                     kickoffAt={match.kickoff_at}

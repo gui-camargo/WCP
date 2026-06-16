@@ -1,15 +1,20 @@
+import { useEffect, useState } from 'react'
 import TeamWithFlag from '@/components/TeamWithFlag'
 import FlagOnly from '@/components/FlagOnly'
+import { supabase } from '@/lib/supabase'
 
 interface MatchRef {
   id: string
   kickoff_at: string
   venue: string
-  status: string
+  status: 'pendente' | 'ao_vivo' | 'encerrado'
   home_score: number | null
   away_score: number | null
   home_team: { name: string; flag_code: string | null } | null
   away_team: { name: string; flag_code: string | null } | null
+  home_win_pct: number | null
+  draw_pct: number | null
+  away_win_pct: number | null
 }
 
 interface UserPredRef {
@@ -37,7 +42,32 @@ export default function MatchPredictionsModal({
   onClose,
   currentUserId,
 }: MatchPredictionsModalProps) {
+  const [liveMatch, setLiveMatch] = useState<Pick<MatchRef, 'status' | 'home_score' | 'away_score'> | null>(null)
+
+  useEffect(() => {
+    if (!open || !match) return
+    setLiveMatch(null)
+
+    const channel = supabase
+      .channel(`match-live-${match.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'matches', filter: `id=eq.${match.id}` },
+        (payload) => {
+          const r = payload.new as { status: MatchRef['status']; home_score: number | null; away_score: number | null }
+          setLiveMatch({ status: r.status, home_score: r.home_score, away_score: r.away_score })
+        }
+      )
+      .subscribe()
+
+    return () => { supabase.removeChannel(channel) }
+  }, [open, match?.id])
+
   if (!open || !match) return null
+
+  const currentStatus = liveMatch?.status ?? match.status
+  const currentHomeScore = liveMatch?.home_score ?? match.home_score
+  const currentAwayScore = liveMatch?.away_score ?? match.away_score
 
   const getPointsColor = (points: number | null) => {
     if (points === null) return 'text-gray-400'
@@ -69,10 +99,11 @@ export default function MatchPredictionsModal({
 
   const sortedPreds = [...userPreds].sort((a, b) => a.user_name.localeCompare(b.user_name, 'pt-BR'))
 
-  const isGameEnded = match.status === 'encerrado'
-  const realHomeWins = (match.home_score ?? 0) > (match.away_score ?? 0)
-  const realAwayWins = (match.home_score ?? 0) < (match.away_score ?? 0)
-  const realDraw = (match.home_score ?? 0) === (match.away_score ?? 0)
+  const isGameEnded = currentStatus === 'encerrado'
+  const isGameLive = currentStatus === 'ao_vivo'
+  const realHomeWins = (currentHomeScore ?? 0) > (currentAwayScore ?? 0)
+  const realAwayWins = (currentHomeScore ?? 0) < (currentAwayScore ?? 0)
+  const realDraw = (currentHomeScore ?? 0) === (currentAwayScore ?? 0)
 
   const getComponentColor = (isCorrect: boolean) => {
     if (!isGameEnded) return 'border-gray-300 bg-white text-gray-700'
@@ -126,8 +157,18 @@ export default function MatchPredictionsModal({
                 align="right"
                 className="font-medium text-gray-800"
               />
-              <div className={`whitespace-nowrap text-center rounded px-1 py-0.5 text-xl sm:text-2xl font-extrabold ${match.status === 'encerrado' ? 'text-black' : 'text-slate-400'}`}>
-                {match.status === 'encerrado' ? `${match.home_score ?? '-'} x ${match.away_score ?? '-'}` : '- x -'}
+              <div className="flex flex-col items-center gap-0.5">
+                <div className={`whitespace-nowrap text-center rounded px-1 py-0.5 text-xl sm:text-2xl font-extrabold ${isGameEnded || isGameLive ? 'text-black' : 'text-slate-400'}`}>
+                  {isGameEnded || isGameLive
+                    ? `${currentHomeScore ?? '-'} x ${currentAwayScore ?? '-'}`
+                    : '- x -'}
+                </div>
+                {isGameLive && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 uppercase tracking-wide">
+                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                    Ao vivo
+                  </span>
+                )}
               </div>
               <TeamWithFlag
                 name={match.away_team?.name}
@@ -138,6 +179,20 @@ export default function MatchPredictionsModal({
                 className="font-medium text-gray-800"
               />
             </div>
+            {(match.home_win_pct !== null && match.draw_pct !== null && match.away_win_pct !== null) && (
+              <div className="mt-2 w-full max-w-xs mx-auto">
+                <div className="flex rounded-full overflow-hidden h-2">
+                  <div className="bg-emerald-500" style={{ width: `${match.home_win_pct}%` }} />
+                  <div className="bg-slate-300" style={{ width: `${match.draw_pct}%` }} />
+                  <div className="bg-red-400" style={{ width: `${match.away_win_pct}%` }} />
+                </div>
+                <div className="flex justify-between text-[10px] font-semibold mt-0.5 text-slate-500">
+                  <span className="text-emerald-600">{match.home_win_pct}%</span>
+                  <span>{match.draw_pct}% empate</span>
+                  <span className="text-red-500">{match.away_win_pct}%</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -179,8 +234,8 @@ export default function MatchPredictionsModal({
                   const predictedDraw = p.home_guess === p.away_guess
 
                   const winnerCorrect = (predictedHomeWins && realHomeWins) || (predictedAwayWins && realAwayWins) || (predictedDraw && realDraw)
-                  const homeGoalCorrect = p.home_guess === match.home_score
-                  const awayGoalCorrect = p.away_guess === match.away_score
+                  const homeGoalCorrect = p.home_guess === currentHomeScore
+                  const awayGoalCorrect = p.away_guess === currentAwayScore
 
                   return (
                     <div key={i} className={`rounded-xl border-2 bg-white px-3 py-2 flex items-center gap-2 ${getPointsBorder(p.points)}`}>

@@ -85,21 +85,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-      setUser(session?.user ?? null)
-      if (session?.user) loadProfile(session.user.id)
-      setLoading(false)
-    })
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session)
       setUser(session?.user ?? null)
-      if (session?.user) loadProfile(session.user.id)
-      else {
+      if (session?.user) {
+        loadProfile(session.user.id)
+      } else {
         setProfile(null)
         setPaymentStatusByPool({})
       }
+      setLoading(false)
     })
 
     return () => subscription.unsubscribe()

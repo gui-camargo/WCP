@@ -49,6 +49,15 @@ interface GroupPred {
   points: number | null
 }
 
+interface PodiumPred {
+  user_id: string
+  user_name: string
+  champion_team: { id: string; name: string; flag_code: string | null } | null
+  vice_team: { id: string; name: string; flag_code: string | null } | null
+  third_team: { id: string; name: string; flag_code: string | null } | null
+  points: number | null
+}
+
 interface TeamClassification {
   team_id: string
   team_name: string
@@ -85,6 +94,9 @@ export default function ResultadosPage() {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
   const [userPreds, setUserPreds] = useState<UserPred[]>([])
   const [groupPreds, setGroupPreds] = useState<GroupPred[]>([])
+  const [podiumPreds, setPodiumPreds] = useState<PodiumPred[]>([])
+  const [loadingPodiumPreds, setLoadingPodiumPreds] = useState(false)
+  const [podiumPredsLoaded, setPodiumPredsLoaded] = useState(false)
   const [groupStandings, setGroupStandings] = useState<GroupStanding[]>([])
   const [groupPredictionsRevealAt, setGroupPredictionsRevealAt] = useState<string | null>(null)
   const [myPredictionsByMatch, setMyPredictionsByMatch] = useState<Record<string, { home_guess: number | null; away_guess: number | null; points: number | null }>>({})
@@ -106,7 +118,8 @@ export default function ResultadosPage() {
     return window.innerWidth >= 768
   })
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({})
-  const currentView = searchParams.get('view') === 'classificacao' ? 'classificacao' : 'jogos'
+  const viewParam = searchParams.get('view')
+  const currentView = viewParam === 'classificacao' ? 'classificacao' : viewParam === 'podio' ? 'podio' : 'jogos'
   const hasOpenModal = Boolean(selected || selectedGroupId)
   const selectedGroupStanding = selectedGroupId
     ? groupStandings.find(g => {
@@ -180,6 +193,10 @@ export default function ResultadosPage() {
   useEffect(() => {
     if (poolId) loadData()
   }, [poolId])
+
+  useEffect(() => {
+    if (currentView === 'podio' && poolId) loadPodiumPreds()
+  }, [currentView, poolId])
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(min-width: 768px)')
@@ -379,7 +396,7 @@ export default function ResultadosPage() {
     setSelected(matchId)
     setLoadingPreds(true)
 
-    const [predsRes, leaderboardRes] = await Promise.all([
+    const [predsRes, leaderboardRes, membersRes] = await Promise.all([
       supabase
         .from('predictions')
         .select('user_id, home_guess, away_guess, points')
@@ -389,6 +406,70 @@ export default function ResultadosPage() {
         .from('leaderboard')
         .select('user_id, user_name')
         .eq('pool_id', poolId!),
+      supabase
+        .from('pool_members')
+        .select('user_id')
+        .eq('pool_id', poolId!),
+    ])
+
+    const predsData = predsRes.data ?? []
+    const allMemberIds: string[] = (membersRes.data ?? []).map((r: any) => r.user_id).filter(Boolean)
+    const allUserIds = Array.from(new Set([
+      ...predsData.map((r: any) => r.user_id).filter(Boolean),
+      ...allMemberIds,
+    ]))
+
+    const nameByUserId = new Map<string, string>(
+      (leaderboardRes.data ?? []).map((row: any) => [row.user_id, row.user_name])
+    )
+
+    if (allUserIds.length > 0) {
+      const { data: profilesData } = await supabase
+        .from('profiles')
+        .select('id, name')
+        .in('id', allUserIds)
+
+      for (const row of profilesData ?? []) {
+        if (!nameByUserId.has((row as any).id) && (row as any).name) {
+          nameByUserId.set((row as any).id, (row as any).name)
+        }
+      }
+    }
+
+    const predByUser = new Map(predsData.map((r: any) => [r.user_id, r]))
+
+    const list: UserPred[] = allMemberIds.map((userId) => {
+      const pred = predByUser.get(userId)
+      return {
+        user_id: userId,
+        user_name: nameByUserId.get(userId) ?? `Usuario ${String(userId).slice(0, 8)}`,
+        home_guess: pred?.home_guess ?? 0,
+        away_guess: pred?.away_guess ?? 0,
+        points: pred?.points ?? null,
+      }
+    })
+    setUserPreds(list)
+    setLoadingPreds(false)
+  }
+
+  async function loadPodiumPreds() {
+    if (podiumPredsLoaded || !poolId) return
+    setLoadingPodiumPreds(true)
+
+    const [predsRes, leaderboardRes] = await Promise.all([
+      supabase
+        .from('podium_predictions')
+        .select(`
+          user_id, points,
+          champion_team:teams!podium_predictions_champion_id_fkey(id, name, flag_code),
+          vice_team:teams!podium_predictions_vice_id_fkey(id, name, flag_code),
+          third_team:teams!podium_predictions_third_id_fkey(id, name, flag_code)
+        `)
+        .eq('pool_id', poolId),
+      supabase
+        .from('leaderboard')
+        .select('user_id, user_name')
+        .eq('pool_id', poolId),
     ])
 
     const predsData = predsRes.data ?? []
@@ -411,15 +492,18 @@ export default function ResultadosPage() {
       }
     }
 
-    const list = predsData.map((r: any) => ({
-      user_id: r.user_id,
-      user_name: nameByUserId.get(r.user_id) ?? `Usuario ${String(r.user_id).slice(0, 8)}`,
-      home_guess: r.home_guess,
-      away_guess: r.away_guess,
-      points: r.points,
+    const list: PodiumPred[] = predsData.map((row: any) => ({
+      user_id: row.user_id,
+      user_name: nameByUserId.get(row.user_id) ?? `Usuario ${String(row.user_id).slice(0, 8)}`,
+      champion_team: row.champion_team ?? null,
+      vice_team: row.vice_team ?? null,
+      third_team: row.third_team ?? null,
+      points: row.points,
     }))
-    setUserPreds(list)
-    setLoadingPreds(false)
+
+    setPodiumPreds(list)
+    setPodiumPredsLoaded(true)
+    setLoadingPodiumPreds(false)
   }
 
   async function loadGroupPreds(groupStanding: GroupStanding) {
@@ -758,7 +842,7 @@ export default function ResultadosPage() {
       </section>
 
       <div className="modern-card p-1.5">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-3 gap-2">
           <button
             onClick={() => setSearchParams({ view: 'jogos' })}
             className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition ${currentView === 'jogos' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-slate-50'}`}
@@ -769,7 +853,13 @@ export default function ResultadosPage() {
             onClick={() => setSearchParams({ view: 'classificacao' })}
             className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition ${currentView === 'classificacao' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-slate-50'}`}
           >
-            Classificacao de Grupos
+            Grupos
+          </button>
+          <button
+            onClick={() => setSearchParams({ view: 'podio' })}
+            className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold border transition ${currentView === 'podio' ? 'bg-brand-600 text-white border-brand-600' : 'bg-white text-gray-600 border-gray-200 hover:bg-slate-50'}`}
+          >
+            Pódio
           </button>
         </div>
       </div>
@@ -961,7 +1051,7 @@ export default function ResultadosPage() {
         </div>
       )}
         </>
-      ) : (
+      ) : currentView === 'classificacao' ? (
         <>
           {loading ? (
             <p className="text-gray-400 text-center py-10">Carregando classificacao...</p>
@@ -1125,6 +1215,92 @@ export default function ResultadosPage() {
             </div>
             )}
             </>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="modern-card border border-slate-200 overflow-hidden">
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 px-3 py-2.5 sm:px-4 sm:py-3">
+              <p className="text-xs font-extrabold tracking-wide uppercase text-white">Resultado Oficial</p>
+            </div>
+            <div className="grid grid-cols-3 gap-2 p-3 sm:p-4">
+              <div className="rounded-lg border border-amber-300 bg-gradient-to-br from-yellow-50 to-amber-100 px-3 py-2">
+                <p className="text-[9px] sm:text-[11px] font-black uppercase tracking-wider text-amber-700 mb-1">🏆 Campeão</p>
+                <p className="text-xs text-gray-400">Indefinido</p>
+              </div>
+              <div className="rounded-lg border border-slate-300 bg-gradient-to-br from-slate-50 to-slate-100 px-3 py-2">
+                <p className="text-[9px] sm:text-[11px] font-black uppercase tracking-wider text-slate-600 mb-1">🥈 Vice</p>
+                <p className="text-xs text-gray-400">Indefinido</p>
+              </div>
+              <div className="rounded-lg border border-orange-300 bg-gradient-to-br from-orange-50 to-amber-50 px-3 py-2">
+                <p className="text-[9px] sm:text-[11px] font-black uppercase tracking-wider text-orange-700 mb-1">🥉 3º lugar</p>
+                <p className="text-xs text-gray-400">Indefinido</p>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500 text-center mt-4 mb-1">Palpites</p>
+
+          {loadingPodiumPreds ? (
+            <p className="text-gray-400 text-center py-10">Carregando palpites...</p>
+          ) : podiumPreds.length === 0 && podiumPredsLoaded ? (
+            <p className="text-gray-400 text-center py-10">Nenhum palpite de pódio registrado.</p>
+          ) : (
+            <div className="space-y-2">
+              {[...podiumPreds]
+                .sort((a, b) => a.user_name.localeCompare(b.user_name, 'pt-BR'))
+                .map((row, i) => {
+                  const isCurrentUser = row.user_id === user?.id
+                  const pointsBadge = getPointsBadge(row.points)
+                  return (
+                    <div key={i} className="modern-card px-3 py-2.5 sm:px-4 sm:py-3 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className={`truncate text-sm ${isCurrentUser ? 'font-bold text-gray-900' : 'font-semibold text-gray-800'}`}>
+                          {row.user_name}
+                        </span>
+                        {isCurrentUser && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm whitespace-nowrap">você</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="text-[9px] font-bold text-amber-600 uppercase">🏆</span>
+                          <div className="rounded border border-amber-200 bg-amber-50 p-1">
+                            {row.champion_team ? (
+                              <FlagOnly flagCode={row.champion_team.flag_code} size="md" />
+                            ) : (
+                              <span className="text-[10px] text-gray-400 px-1">-</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="text-[9px] font-bold text-slate-500 uppercase">🥈</span>
+                          <div className="rounded border border-slate-200 bg-slate-50 p-1">
+                            {row.vice_team ? (
+                              <FlagOnly flagCode={row.vice_team.flag_code} size="md" />
+                            ) : (
+                              <span className="text-[10px] text-gray-400 px-1">-</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span className="text-[9px] font-bold text-orange-500 uppercase">🥉</span>
+                          <div className="rounded border border-orange-200 bg-orange-50 p-1">
+                            {row.third_team ? (
+                              <FlagOnly flagCode={row.third_team.flag_code} size="md" />
+                            ) : (
+                              <span className="text-[10px] text-gray-400 px-1">-</span>
+                            )}
+                          </div>
+                        </div>
+                        <span className={`inline-flex items-center rounded-full border text-xs font-bold px-2 py-0.5 ${pointsBadge.className}`}>
+                          {pointsBadge.text}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
           )}
         </>
       )}

@@ -265,7 +265,17 @@ export default function RodadaPage() {
     }, {})
 
     return Object.entries(grouped)
-      .sort(([a], [b]) => a.localeCompare(b))
+      .sort(([dateA, matchesA], [dateB, matchesB]) => {
+        // Check if all matches of each date are finished
+        const aComplete = matchesA.every(m => m.home_score !== null && m.away_score !== null)
+        const bComplete = matchesB.every(m => m.home_score !== null && m.away_score !== null)
+
+        // Incomplete dates come first
+        if (aComplete !== bComplete) return aComplete ? 1 : -1
+
+        // Same status: sort by date
+        return dateA.localeCompare(dateB)
+      })
       .map(([dateKey, dateMatches]) => {
         const dayRef = new Date(`${dateKey}T00:00:00`)
         const weekday = dayRef.toLocaleDateString('pt-BR', { weekday: 'long' })
