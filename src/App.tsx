@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { AuthProvider } from '@/contexts/AuthContext'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
+import { AuthProvider, useAuth } from '@/contexts/AuthContext'
+import { useEffect } from 'react'
 import PrivateRoute from '@/components/PrivateRoute'
 import PaidRoute from '@/components/PaidRoute'
 import Layout from '@/components/Layout'
@@ -19,10 +20,41 @@ import PodiumPredictionsPage from '@/pages/PodiumPredictionsPage'
 import MeusPalpitesPage from '@/pages/MeusPalpitesPage'
 import PaymentPendingPage from '@/pages/PaymentPendingPage'
 
+const LAST_PATH_KEY = 'wcp-last-path'
+const RESTORE_BLOCKLIST = ['/login', '/cadastro', '/esqueceu-senha', '/reset-senha']
+
+function RouteTracker() {
+  const location = useLocation()
+  useEffect(() => {
+    if (!RESTORE_BLOCKLIST.includes(location.pathname)) {
+      localStorage.setItem(LAST_PATH_KEY, location.pathname)
+    }
+  }, [location.pathname])
+  return null
+}
+
+function RootRedirect() {
+  const { user, profile, loading } = useAuth()
+
+  // Fast path: redirect immediately to last visited page.
+  // PrivateRoute handles the auth check from there.
+  const lastPath = localStorage.getItem(LAST_PATH_KEY)
+  if (lastPath) return <Navigate to={lastPath} replace />
+
+  // No saved path: wait for auth + profile before deciding where to go.
+  if (loading) {
+    return <div className="flex items-center justify-center h-screen text-gray-500">Carregando...</div>
+  }
+  if (!user) return <Navigate to="/login" replace />
+  if (profile?.active_pool_id) return <Navigate to={`/bolao/${profile.active_pool_id}`} replace />
+  return <Navigate to="/login" replace />
+}
+
 export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter basename={import.meta.env.BASE_URL}>
+        <RouteTracker />
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route path="/cadastro" element={<CadastroPage />} />
@@ -46,6 +78,7 @@ export default function App() {
               </Route>
             </Route>
           </Route>
+          <Route index element={<RootRedirect />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>

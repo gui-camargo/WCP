@@ -13,6 +13,7 @@ interface Match {
   id: string
   kickoff_at: string
   group: { code: string } | null
+  group_code: string | null
   round: { id: string; name: string; phase: string } | null
   home_team: { name: string; flag_code: string | null }
   away_team: { name: string; flag_code: string | null }
@@ -20,7 +21,10 @@ interface Match {
   away_score: number | null
   venue: string
   cutoff_at: string
-  status: string
+  status: 'pendente' | 'ao_vivo' | 'encerrado'
+  home_win_pct: number | null
+  draw_pct: number | null
+  away_win_pct: number | null
 }
 
 interface UserPred {

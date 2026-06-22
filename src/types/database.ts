@@ -63,6 +63,7 @@ export interface Database {
           home_win_pct: number | null
           draw_pct: number | null
           away_win_pct: number | null
+          time_detail: string | null
         }
         Insert: {
           round_id: string; group_id?: string

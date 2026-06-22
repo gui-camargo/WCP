@@ -43,3 +43,29 @@ export async function exportSnapshotAsImage(
     throw error;
   }
 }
+
+export async function exportElementAsImage(
+  elementId: string,
+  filename: string,
+): Promise<void> {
+  const element = document.getElementById(elementId);
+  if (!element) throw new Error(`Element #${elementId} not found`);
+
+  const canvas = await html2canvas(element, {
+    backgroundColor: '#ffffff',
+    scale: 3,
+    useCORS: true,
+    logging: false,
+    imageTimeout: 0,
+    windowWidth: element.scrollWidth,
+    windowHeight: element.scrollHeight,
+    allowTaint: true,
+  });
+
+  const link = document.createElement('a');
+  link.href = canvas.toDataURL('image/png');
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+}

@@ -9,14 +9,29 @@ interface Pool {
   name: string
 }
 
+const LAST_PATH_KEY = 'wcp-last-path'
+
 export default function LoginPage() {
-  const { signIn, user, profile, setActivePool } = useAuth()
+  const { signIn, user, profile, setActivePool, loading: authLoading } = useAuth()
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [shouldRedirect, setShouldRedirect] = useState(false)
+
+  // Auto-redirect if already authenticated
+  useEffect(() => {
+    if (authLoading || !user || !profile) return
+    const lastPath = localStorage.getItem(LAST_PATH_KEY)
+    if (lastPath) {
+      navigate(lastPath, { replace: true })
+    } else if (profile.active_pool_id) {
+      navigate(`/bolao/${profile.active_pool_id}`, { replace: true })
+    } else {
+      void redirectToPool()
+    }
+  }, [authLoading, user, profile])
 
   async function redirectToPool() {
     if (!user) return
@@ -90,6 +105,10 @@ export default function LoginPage() {
       console.info('[Login] submit:success', { email })
       setShouldRedirect(true)
     }
+  }
+
+  if (authLoading || (!authLoading && user && profile)) {
+    return <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-700 via-brand-600 to-accent-600" />
   }
 
   return (

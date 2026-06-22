@@ -5,6 +5,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import TeamWithFlag from '@/components/TeamWithFlag';
 import ResultMatchCard from '@/components/ResultMatchCard';
 import MatchPredictionsModal from '@/components/MatchPredictionsModal';
+import PredictionEditModal from '@/components/PredictionEditModal';
 import {
   IconAward,
   IconParticipants,
@@ -40,6 +41,8 @@ interface MatchRow {
   away_score: number | null;
   group_id: string | null;
   group_code: string | null;
+  home_team_id: string | null;
+  away_team_id: string | null;
   home_team: { name: string; flag_code: string | null } | null;
   away_team: { name: string; flag_code: string | null } | null;
   home_win_pct: number | null;
@@ -60,6 +63,7 @@ interface UserPred {
   home_guess: number;
   away_guess: number;
   points: number | null;
+  predicted?: boolean;
 }
 
 interface PrizeOverview {
@@ -91,14 +95,16 @@ export default function BolaoPage() {
   const [selectedPastMatchId, setSelectedPastMatchId] = useState<string | null>(
     null,
   );
+  const [modalMode, setModalMode] = useState<'edit' | 'view'>('view');
   const [userPreds, setUserPreds] = useState<UserPred[]>([]);
   const [loadingPastPreds, setLoadingPastPreds] = useState(false);
+  const [savingPrediction, setSavingPrediction] = useState(false);
   const [prizeOverview, setPrizeOverview] = useState<PrizeOverview | null>(
     null,
   );
   const [loading, setLoading] = useState(true);
   const [liveMatchData, setLiveMatchData] = useState<
-    Record<string, { status: MatchRow['status']; home_score: number | null; away_score: number | null }>
+    Record<string, { status: MatchRow['status']; home_score: number | null; away_score: number | null; time_detail: string | null }>
   >({});
 
   useEffect(() => {
@@ -112,10 +118,10 @@ export default function BolaoPage() {
         'postgres_changes',
         { event: 'UPDATE', schema: 'public', table: 'matches' },
         (payload) => {
-          const r = payload.new as { id: string; status: MatchRow['status']; home_score: number | null; away_score: number | null };
+          const r = payload.new as { id: string; status: MatchRow['status']; home_score: number | null; away_score: number | null; time_detail: string | null };
           setLiveMatchData((prev) => ({
             ...prev,
-            [r.id]: { status: r.status, home_score: r.home_score, away_score: r.away_score },
+            [r.id]: { status: r.status, home_score: r.home_score, away_score: r.away_score, time_detail: r.time_detail },
           }));
         },
       )
@@ -145,108 +151,86 @@ export default function BolaoPage() {
   async function loadData() {
     setLoading(true);
 
-    const { data: pool } = await supabase
-      .from('pools')
-      .select('name')
-      .eq('id', poolId!)
-      .single();
-    setPoolName((pool as any)?.name ?? '');
+    const matchSelect = `
+      id, round_id, kickoff_at, venue, cutoff_at, status, home_score, away_score, group_id,
+      home_team_id, away_team_id, external_match_id, home_win_pct, draw_pct, away_win_pct, time_detail,
+      home_team:teams!matches_home_team_id_fkey(name, flag_code),
+      away_team:teams!matches_away_team_id_fkey(name, flag_code)
+    `;
 
-    const { data: prizeData, error: prizeError } = await (supabase as any).rpc(
-      'get_pool_prize_overview',
-      { p_pool_id: poolId! },
-    );
+    const [
+      { data: pool },
+      { data: prizeData, error: prizeError },
+      { data: roundData },
+      { data: groupsData },
+      { data: leaderboardData },
+    ] = await Promise.all([
+      supabase.from('pools').select('name').eq('id', poolId!).single(),
+      (supabase as any).rpc('get_pool_prize_overview', { p_pool_id: poolId! }),
+      supabase.from('rounds').select('*').eq('pool_id', poolId!).order('created_at'),
+      supabase.from('groups').select('id, code'),
+      supabase.from('leaderboard').select('user_id, user_name, total_points, rank').eq('pool_id', poolId!).order('rank', { ascending: true }).order('user_name', { ascending: true }),
+    ]);
+
+    setPoolName((pool as any)?.name ?? '');
 
     if (prizeError) {
       setPrizeOverview(null);
     } else {
       const row = Array.isArray(prizeData) ? prizeData[0] : prizeData;
-      if (row) {
-        setPrizeOverview({
-          confirmed_count: Number(row.confirmed_count ?? 0),
-          first_prize_cents: Number(row.first_prize_cents ?? 0),
-          second_prize_cents: Number(row.second_prize_cents ?? 0),
-          third_prize_cents: Number(row.third_prize_cents ?? 0),
-        });
-      } else {
-        setPrizeOverview({
-          confirmed_count: 0,
-          first_prize_cents: 0,
-          second_prize_cents: 0,
-          third_prize_cents: 0,
-        });
-      }
+      setPrizeOverview(row ? {
+        confirmed_count: Number(row.confirmed_count ?? 0),
+        first_prize_cents: Number(row.first_prize_cents ?? 0),
+        second_prize_cents: Number(row.second_prize_cents ?? 0),
+        third_prize_cents: Number(row.third_prize_cents ?? 0),
+      } : {
+        confirmed_count: 0,
+        first_prize_cents: 0,
+        second_prize_cents: 0,
+        third_prize_cents: 0,
+      });
     }
 
-    const { data: roundData } = await supabase
-      .from('rounds')
-      .select('*')
-      .eq('pool_id', poolId!)
-      .order('created_at');
     const nextRounds = (roundData ?? []) as Round[];
     setRounds(nextRounds);
-
     const roundIds = nextRounds.map((r) => r.id);
 
-    const { data: groupsData } = await supabase
-      .from('groups')
-      .select('id, code');
     const groupCodeMap = new Map(
       (groupsData ?? []).map((g: any) => [g.id, g.code]),
     );
 
-    const { data: leaderboardData } = await supabase
-      .from('leaderboard')
-      .select('user_id, user_name, total_points, rank')
-      .eq('pool_id', poolId!)
-      .order('rank', { ascending: true })
-      .order('user_name', { ascending: true });
-
     const filteredRows = (leaderboardData ?? []) as LeaderboardRow[];
-
     setTopRanking(filteredRows.slice(0, 5));
     setMyRanking(filteredRows.find((row) => row.user_id === user!.id) ?? null);
 
     if (roundIds.length > 0) {
-      const matchSelect = `
-        id, round_id, kickoff_at, venue, cutoff_at, status, home_score, away_score, group_id,
-        external_match_id, home_win_pct, draw_pct, away_win_pct,
-        home_team:teams!matches_home_team_id_fkey(name, flag_code),
-        away_team:teams!matches_away_team_id_fkey(name, flag_code)
-      `;
-
       const [{ data: recentData }, { data: upcomingData }] = await Promise.all([
-        supabase
-          .from('matches')
-          .select(matchSelect)
-          .in('round_id', roundIds)
-          .eq('status', 'encerrado')
-          .order('kickoff_at', { ascending: false })
-          .limit(4),
-        supabase
-          .from('matches')
-          .select(matchSelect)
-          .in('round_id', roundIds)
-          .neq('status', 'encerrado')
-          .order('kickoff_at', { ascending: true })
-          .limit(3),
+        supabase.from('matches').select(matchSelect).in('round_id', roundIds).eq('status', 'encerrado').order('kickoff_at', { ascending: false }).limit(4),
+        supabase.from('matches').select(matchSelect).in('round_id', roundIds).neq('status', 'encerrado').order('kickoff_at', { ascending: true }).limit(3),
       ]);
 
-      const recent = ((recentData ?? []) as unknown as MatchRow[]).map(
-        (m) => ({
-          ...m,
-          group_code: m.group_id ? groupCodeMap.get(m.group_id) || null : null,
-        }),
-      );
-      const upcoming = ((upcomingData ?? []) as unknown as MatchRow[]).map(
-        (m) => ({
-          ...m,
-          group_code: m.group_id ? groupCodeMap.get(m.group_id) || null : null,
-        }),
-      );
+      const recent = ((recentData ?? []) as unknown as MatchRow[]).map((m) => ({
+        ...m,
+        group_code: m.group_id ? groupCodeMap.get(m.group_id) || null : null,
+      }));
+      const upcoming = ((upcomingData ?? []) as unknown as MatchRow[]).map((m) => ({
+        ...m,
+        group_code: m.group_id ? groupCodeMap.get(m.group_id) || null : null,
+      }));
 
       setRecentMatches(recent);
       setUpcomingTodayMatches(upcoming);
+
+      // Pre-populate liveMatchData for matches already ao_vivo on page load
+      const initialLive: Record<string, { status: MatchRow['status']; home_score: number | null; away_score: number | null; time_detail: string | null }> = {};
+      for (const m of [...recent, ...upcoming]) {
+        if (m.status === 'ao_vivo') {
+          initialLive[m.id] = { status: m.status, home_score: m.home_score, away_score: m.away_score, time_detail: (m as any).time_detail ?? null };
+        }
+      }
+      if (Object.keys(initialLive).length > 0) {
+        setLiveMatchData((prev) => ({ ...prev, ...initialLive }));
+      }
 
       const matchIds = [...recent, ...upcoming].map((m) => m.id);
       if (matchIds.length > 0) {
@@ -258,8 +242,7 @@ export default function BolaoPage() {
           .in('match_id', matchIds);
 
         const map: Record<string, PredictionRow> = {};
-        for (const p of (predsData ?? []) as PredictionRow[])
-          map[p.match_id] = p;
+        for (const p of (predsData ?? []) as PredictionRow[]) map[p.match_id] = p;
         setPredictionsByMatch(map);
       } else {
         setPredictionsByMatch({});
@@ -361,12 +344,72 @@ export default function BolaoPage() {
     setUserPreds([]);
   }
 
+  async function savePredictionFromModal(home: number | null, away: number | null) {
+    if (!poolId || !user || !selectedPastMatchId) return;
+
+    // Only save if both sides are filled
+    if (home === null || away === null) return;
+
+    setSavingPrediction(true);
+
+    const existing = predictionsByMatch[selectedPastMatchId];
+    let saveError: any = null;
+
+    if (existing) {
+      const { error } = await (supabase.from('predictions') as any)
+        .update({ home_guess: home, away_guess: away })
+        .eq('pool_id', poolId)
+        .eq('match_id', selectedPastMatchId)
+        .eq('user_id', user.id);
+      saveError = error;
+    } else {
+      const { error } = await (supabase.from('predictions') as any).insert({
+        pool_id: poolId,
+        match_id: selectedPastMatchId,
+        user_id: user.id,
+        home_guess: home,
+        away_guess: away,
+      });
+      saveError = error;
+    }
+
+    if (saveError) {
+      console.error('[BolaoPage] save prediction error', saveError);
+      setSavingPrediction(false);
+      return;
+    }
+
+    setPredictionsByMatch(p => ({
+      ...p,
+      [selectedPastMatchId]: { match_id: selectedPastMatchId, home_guess: home, away_guess: away, points: null }
+    }));
+    setSavingPrediction(false);
+  }
+
   async function openPastPredsModal(matchId: string) {
     if (!poolId) return;
+
+    const match = [...upcomingTodayMatches, ...recentMatches].find(
+      (m) => m.id === matchId,
+    );
+    if (!match) return;
+
+    // Detectar cenário
+    const now = new Date();
+    // Parse cutoff_at string robustamente - converter espaço para T se necessário
+    const cutoffStr = match.cutoff_at.replace(' ', 'T');
+    const cutoffTime = new Date(cutoffStr);
+    const isOpen = cutoffTime > now;
+
+    // Modo edição: palpites ainda abertos
+    // Modo visualização: palpites fechados
+    const mode = isOpen ? 'edit' : 'view';
+    setModalMode(mode);
 
     setSelectedPastMatchId(matchId);
     setLoadingPastPreds(true);
 
+    // Sempre carregar palpites para calcular percentuais
     const [predsRes, leaderboardRes, membersRes] = await Promise.all([
       supabase
         .from('predictions')
@@ -384,15 +427,10 @@ export default function BolaoPage() {
     ]);
 
     const predsData = predsRes.data ?? [];
+
     const allMemberIds: string[] = (membersRes.data ?? [])
       .map((r: any) => r.user_id)
       .filter(Boolean);
-    const allUserIds = Array.from(
-      new Set([
-        ...predsData.map((r: any) => r.user_id).filter(Boolean),
-        ...allMemberIds,
-      ]),
-    );
 
     const nameByUserId = new Map<string, string>(
       (leaderboardRes.data ?? []).map((row: any) => [
@@ -401,11 +439,19 @@ export default function BolaoPage() {
       ]),
     );
 
-    if (allUserIds.length > 0) {
+    const predictedUserIds = Array.from(
+      new Set(
+        predsData
+          .map((r: any) => r.user_id)
+          .filter(Boolean),
+      ),
+    );
+
+    if (predictedUserIds.length > 0) {
       const { data: profilesData } = await supabase
         .from('profiles')
         .select('id, name')
-        .in('id', allUserIds);
+        .in('id', predictedUserIds);
 
       for (const row of profilesData ?? []) {
         if (!nameByUserId.has((row as any).id) && (row as any).name) {
@@ -414,21 +460,30 @@ export default function BolaoPage() {
       }
     }
 
-    const predByUser = new Map(predsData.map((r: any) => [r.user_id, r]));
+    // Mapear palpites por user_id
+    const predByUser = new Map(
+      predsData.map((r: any) => [r.user_id, r]),
+    );
 
+    // Para cada membro, se não tem palpite, considera como 0x0
     const list: UserPred[] = allMemberIds.map((userId) => {
       const pred = predByUser.get(userId);
       return {
         user_id: userId,
         user_name:
-          nameByUserId.get(userId) ?? `Usuario ${String(userId).slice(0, 8)}`,
+          nameByUserId.get(userId) ??
+          `Usuario ${String(userId).slice(0, 8)}`,
         home_guess: pred?.home_guess ?? 0,
         away_guess: pred?.away_guess ?? 0,
         points: pred?.points ?? null,
+        predicted: pred !== undefined,
       };
     });
 
-    setUserPreds(list);
+    // Em modo view, mostrar todos os palpites (incluindo os 0x0)
+    // Em modo edit, mostrar palpites vazios (serão carregados dinamicamente)
+    setUserPreds(mode === 'view' ? list : []);
+
     setLoadingPastPreds(false);
   }
 
@@ -481,26 +536,26 @@ export default function BolaoPage() {
 
               <div className="grid grid-cols-3 gap-2 sm:gap-2 w-full sm:w-auto sm:ml-auto">
                 <div className="rounded-xl border border-yellow-200 bg-yellow-50 px-3 py-2 text-center min-w-[96px] sm:min-w-[88px]">
-                  <p className="text-[11px] uppercase tracking-wide font-bold text-yellow-700">
+                  <p className="text-[9px] uppercase tracking-wide font-bold text-yellow-700">
                     1º · 70%
                   </p>
-                  <p className="text-sm sm:text-base font-extrabold text-yellow-800">
+                  <p className="text-xs sm:text-sm font-extrabold text-yellow-800">
                     {formatCents(prizeOverview?.first_prize_cents ?? 0)}
                   </p>
                 </div>
                 <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-center min-w-[96px] sm:min-w-[88px]">
-                  <p className="text-[11px] uppercase tracking-wide font-bold text-slate-600">
+                  <p className="text-[9px] uppercase tracking-wide font-bold text-slate-600">
                     2º · 20%
                   </p>
-                  <p className="text-sm sm:text-base font-extrabold text-slate-700">
+                  <p className="text-xs sm:text-sm font-extrabold text-slate-700">
                     {formatCents(prizeOverview?.second_prize_cents ?? 0)}
                   </p>
                 </div>
                 <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-center min-w-[96px] sm:min-w-[88px]">
-                  <p className="text-[11px] uppercase tracking-wide font-bold text-amber-700">
+                  <p className="text-[9px] uppercase tracking-wide font-bold text-amber-700">
                     3º · 10%
                   </p>
-                  <p className="text-sm sm:text-base font-extrabold text-amber-800">
+                  <p className="text-xs sm:text-sm font-extrabold text-amber-800">
                     {formatCents(prizeOverview?.third_prize_cents ?? 0)}
                   </p>
                 </div>
@@ -520,7 +575,7 @@ export default function BolaoPage() {
                 to={`/bolao/${poolId}/palpites`}
                 className="inline-flex items-center gap-1 rounded-full border border-brand-200 bg-brand-50 px-2.5 py-1 text-xs font-semibold text-brand-600 hover:bg-brand-100 transition"
               >
-                Ver palpites
+                Meus Palpites
                 <svg
                   viewBox="0 0 20 20"
                   fill="currentColor"
@@ -547,6 +602,7 @@ export default function BolaoPage() {
                   const currentStatus = live?.status ?? match.status;
                   const currentHomeScore = live?.home_score ?? match.home_score;
                   const currentAwayScore = live?.away_score ?? match.away_score;
+                  const currentTimeDetail = live?.time_detail ?? null;
                   const day = dayLabel(match.kickoff_at, currentStatus);
                   const hasPred =
                     pred?.home_guess !== undefined &&
@@ -582,6 +638,9 @@ export default function BolaoPage() {
                             </span>
                           )}
                           {day.label}
+                          {currentStatus === 'ao_vivo' && currentTimeDetail && (
+                            <span className="font-normal opacity-80">· {({ HT: 'Intervalo', ET: 'Prorrogação', Pen: 'Pênaltis' } as Record<string, string>)[currentTimeDetail] ?? currentTimeDetail}</span>
+                          )}
                         </span>
                         <div className="inline-flex items-center rounded-lg border border-slate-300 bg-slate-50 px-2 py-1">
                           <span className="text-[10px] font-semibold text-gray-700">
@@ -657,8 +716,8 @@ export default function BolaoPage() {
                           <span className="inline-flex items-center rounded-lg border border-sky-300 bg-sky-100 px-2 py-0.5 text-sm font-extrabold text-sky-800">
                             {pred.home_guess}×{pred.away_guess}
                           </span>
-                          <Link
-                            to={`/bolao/${poolId}/rodada/${match.round_id}`}
+                          <button
+                            onClick={() => openPastPredsModal(match.id)}
                             className="justify-self-end inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-sky-200 bg-white px-2 py-0.5 text-[10px] font-semibold text-sky-700 hover:bg-sky-50 transition"
                           >
                             ✏️ Alterar
@@ -673,15 +732,15 @@ export default function BolaoPage() {
                                 clipRule="evenodd"
                               />
                             </svg>
-                          </Link>
+                          </button>
                         </div>
                       ) : (
-                        <Link
-                          to={`/bolao/${poolId}/rodada/${match.round_id}`}
+                        <button
+                          onClick={() => openPastPredsModal(match.id)}
                           className="flex items-center justify-center gap-1.5 w-full rounded-xl border border-rose-300 bg-white hover:bg-rose-50 text-rose-700 text-xs font-bold py-1.5 transition"
                         >
                           <span>⚠️</span> Dar palpite
-                        </Link>
+                        </button>
                       )}
 
                       {new Date(match.cutoff_at) > new Date() && (
@@ -927,22 +986,49 @@ export default function BolaoPage() {
         </div>
       )}
 
-      <MatchPredictionsModal
-        open={Boolean(selectedPastMatchId)}
-        match={
-          selectedPastMatchId
-            ? ((recentMatches.find((m) => m.id === selectedPastMatchId) ||
-                upcomingTodayMatches.find(
-                  (m) => m.id === selectedPastMatchId,
-                )) ??
-              null)
-            : null
-        }
-        userPreds={userPreds}
-        loadingPreds={loadingPastPreds}
-        onClose={closePastPredsModal}
-        currentUserId={user?.id ?? null}
-      />
+      {modalMode === 'edit' ? (
+        <PredictionEditModal
+          open={Boolean(selectedPastMatchId)}
+          match={
+            selectedPastMatchId
+              ? ((recentMatches.find((m) => m.id === selectedPastMatchId) ||
+                  upcomingTodayMatches.find(
+                    (m) => m.id === selectedPastMatchId,
+                  )) ??
+                null)
+              : null
+          }
+          onClose={closePastPredsModal}
+          myPrediction={
+            selectedPastMatchId && predictionsByMatch[selectedPastMatchId]
+              ? {
+                  home_guess: predictionsByMatch[selectedPastMatchId].home_guess,
+                  away_guess: predictionsByMatch[selectedPastMatchId].away_guess,
+                }
+              : null
+          }
+          isSaving={savingPrediction}
+          onPredictionChange={savePredictionFromModal}
+          onSaveSuccess={() => {}}
+        />
+      ) : (
+        <MatchPredictionsModal
+          open={Boolean(selectedPastMatchId)}
+          match={
+            selectedPastMatchId
+              ? ((recentMatches.find((m) => m.id === selectedPastMatchId) ||
+                  upcomingTodayMatches.find(
+                    (m) => m.id === selectedPastMatchId,
+                  )) ??
+                null)
+              : null
+          }
+          userPreds={userPreds}
+          loadingPreds={loadingPastPreds}
+          onClose={closePastPredsModal}
+          currentUserId={user?.id ?? null}
+        />
+      )}
     </div>
   );
 }

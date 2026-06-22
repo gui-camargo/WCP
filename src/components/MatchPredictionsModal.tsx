@@ -1,12 +1,15 @@
 import { useEffect, useState } from 'react'
 import TeamWithFlag from '@/components/TeamWithFlag'
 import FlagOnly from '@/components/FlagOnly'
+import { IconParticipants } from '@/components/Icons'
 import { supabase } from '@/lib/supabase'
 
 interface MatchRef {
   id: string
   kickoff_at: string
   venue: string
+  cutoff_at: string
+  group_code: string | null
   status: 'pendente' | 'ao_vivo' | 'encerrado'
   home_score: number | null
   away_score: number | null
@@ -23,6 +26,7 @@ interface UserPredRef {
   home_guess: number
   away_guess: number
   points: number | null
+  predicted?: boolean
 }
 
 interface MatchPredictionsModalProps {
@@ -147,63 +151,230 @@ export default function MatchPredictionsModal({
             <p className="text-xs text-center text-slate-600 font-semibold">
               {new Date(match.kickoff_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })} | {match.venue || '-'}
             </p>
-            <div className="flex items-center justify-center gap-3">
-              <TeamWithFlag
-                name={match.home_team?.name}
-                flagCode={match.home_team?.flag_code}
-                size="sm"
-                compact
-                reverse
-                align="right"
-                className="font-medium text-gray-800"
-              />
-              <div className="flex flex-col items-center gap-0.5">
-                <div className={`whitespace-nowrap text-center rounded px-1 py-0.5 text-xl sm:text-2xl font-extrabold ${isGameEnded || isGameLive ? 'text-black' : 'text-slate-400'}`}>
+            <div className="flex items-center justify-center gap-2 sm:gap-4">
+              <div className="flex-1 sm:flex-none flex justify-end">
+                <TeamWithFlag
+                  name={match.home_team?.name}
+                  flagCode={match.home_team?.flag_code}
+                  size="md"
+                  compact
+                  reverse
+                  align="right"
+                  className="font-semibold text-gray-800 text-xs sm:text-sm"
+                />
+              </div>
+              <div className="flex flex-col items-center gap-1 shrink-0">
+                <div className={`whitespace-nowrap text-center rounded px-2 py-1 text-2xl sm:text-4xl font-extrabold ${isGameEnded || isGameLive ? 'text-black' : 'text-slate-400'}`}>
                   {isGameEnded || isGameLive
-                    ? `${currentHomeScore ?? '-'} x ${currentAwayScore ?? '-'}`
-                    : '- x -'}
+                    ? `${currentHomeScore ?? '-'} × ${currentAwayScore ?? '-'}`
+                    : '- × -'}
                 </div>
                 {isGameLive && (
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-red-600 uppercase tracking-wide">
-                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                  <span className="inline-flex items-center gap-1 text-[11px] sm:text-xs font-bold text-red-600 uppercase tracking-widest">
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
                     Ao vivo
                   </span>
                 )}
               </div>
-              <TeamWithFlag
-                name={match.away_team?.name}
-                flagCode={match.away_team?.flag_code}
-                size="sm"
-                compact
-                align="left"
-                className="font-medium text-gray-800"
-              />
-            </div>
-            {(match.home_win_pct !== null && match.draw_pct !== null && match.away_win_pct !== null) && (
-              <div className="mt-2 w-full max-w-xs mx-auto">
-                <div className="flex rounded-full overflow-hidden h-2">
-                  <div className="bg-emerald-500" style={{ width: `${match.home_win_pct}%` }} />
-                  <div className="bg-slate-300" style={{ width: `${match.draw_pct}%` }} />
-                  <div className="bg-red-400" style={{ width: `${match.away_win_pct}%` }} />
-                </div>
-                <div className="flex justify-between text-[10px] font-semibold mt-0.5 text-slate-500">
-                  <span className="text-emerald-600">{match.home_win_pct}%</span>
-                  <span>{match.draw_pct}% empate</span>
-                  <span className="text-red-500">{match.away_win_pct}%</span>
-                </div>
+              <div className="flex-1 sm:flex-none flex justify-start">
+                <TeamWithFlag
+                  name={match.away_team?.name}
+                  flagCode={match.away_team?.flag_code}
+                  size="md"
+                  compact
+                  align="left"
+                  className="font-semibold text-gray-800 text-xs sm:text-sm"
+                />
               </div>
-            )}
+            </div>
           </div>
         </div>
 
         <div className="flex-1 overflow-auto p-4 sm:p-5">
           {loadingPreds ? (
             <p className="text-gray-400">Carregando palpites...</p>
-          ) : userPreds.length === 0 ? (
-            <p className="text-gray-400">Nenhum palpite registrado.</p>
-          ) : (
-            <div className="space-y-3">
-              {isGameEnded && (() => {
+          ) : userPreds.length > 0 ? (
+            <div className="space-y-4">
+              {userPreds.length > 0 && (() => {
+                if (isGameEnded) return null;
+
+                const realPreds = userPreds.filter((p) => p.predicted);
+                const homeWins = userPreds.filter(
+                  (p) => p.home_guess > p.away_guess,
+                ).length;
+                const draws = userPreds.filter(
+                  (p) => p.home_guess === p.away_guess,
+                ).length;
+                const awayWins = userPreds.filter(
+                  (p) => p.home_guess < p.away_guess,
+                ).length;
+                const total = userPreds.length;
+
+                const homeWinPct =
+                  total > 0 ? Math.round((homeWins / total) * 100) : 0;
+                const drawPct =
+                  total > 0 ? Math.round((draws / total) * 100) : 0;
+                const awayWinPct =
+                  total > 0 ? Math.round((awayWins / total) * 100) : 0;
+
+                return (
+                  <div>
+                    <div className="mb-3">
+                      <p className="text-xs font-semibold text-gray-600 mb-2">
+                        <span className="inline-flex items-center rounded-full border border-gray-300 bg-gray-50 px-2.5 py-1 text-xs font-bold">
+                          {realPreds.length}{' '}
+                          <span className="mx-1 text-gray-500">/</span>
+                          {total} Palpites
+                        </span>
+                      </p>
+                      <div className="flex rounded-lg overflow-hidden h-3 mb-3">
+                        <div
+                          className="bg-blue-500"
+                          style={{ width: `${homeWinPct}%` }}
+                        />
+                        <div
+                          className="bg-yellow-400"
+                          style={{ width: `${drawPct}%` }}
+                        />
+                        <div
+                          className="bg-pink-400"
+                          style={{ width: `${awayWinPct}%` }}
+                        />
+                      </div>
+                      {/* Mobile Layout */}
+                      <div className="flex gap-2 sm:hidden">
+                        {/* Home */}
+                        <div className="flex-1 flex flex-col gap-0 rounded-lg bg-blue-50 border-2 border-blue-400 overflow-hidden">
+                          <div className="text-center text-xs text-blue-600 font-semibold bg-blue-100/50 pt-0.5 pb-0 px-1 leading-tight">
+                            {match?.home_team?.flag_code?.toUpperCase()}
+                          </div>
+                          <div className="flex items-center justify-center gap-1 px-2 py-0 leading-tight">
+                            <div className="flex items-center gap-0.5 text-blue-600 font-semibold text-xs">
+                              <IconParticipants className="w-3 h-3" />
+                              <span>{homeWins}</span>
+                            </div>
+                            {match?.home_team?.flag_code && (
+                              <FlagOnly
+                                flagCode={match.home_team.flag_code}
+                                size="xs"
+                              />
+                            )}
+                            <div className="text-sm font-bold text-blue-800">
+                              {homeWinPct}%
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Draw */}
+                        <div className="flex-1 flex flex-col gap-0 rounded-lg bg-yellow-50 border-2 border-yellow-400 overflow-hidden">
+                          <div className="text-center text-xs text-yellow-600 font-semibold bg-yellow-100/50 py-0 px-1 uppercase">
+                            Empate
+                          </div>
+                          <div className="flex items-center justify-center gap-1 px-2 py-0 leading-tight">
+                            <div className="flex items-center gap-0.5 text-yellow-600 font-semibold text-xs">
+                              <IconParticipants className="w-3 h-3" />
+                              <span>{draws}</span>
+                            </div>
+                            <div className="text-base">🟰</div>
+                            <div className="text-sm font-bold text-yellow-800">
+                              {drawPct}%
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Away */}
+                        <div className="flex-1 flex flex-col gap-0 rounded-lg bg-pink-50 border-2 border-pink-400 overflow-hidden">
+                          <div className="text-center text-xs text-pink-600 font-semibold bg-pink-100/50 py-0 px-1">
+                            {match?.away_team?.flag_code?.toUpperCase()}
+                          </div>
+                          <div className="flex items-center justify-center gap-1 px-2 py-0 leading-tight">
+                            <div className="flex items-center gap-0.5 text-pink-600 font-semibold text-xs">
+                              <IconParticipants className="w-3 h-3" />
+                              <span>{awayWins}</span>
+                            </div>
+                            {match?.away_team?.flag_code && (
+                              <FlagOnly
+                                flagCode={match.away_team.flag_code}
+                                size="xs"
+                              />
+                            )}
+                            <div className="text-sm font-bold text-pink-800">
+                              {awayWinPct}%
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Desktop Layout */}
+                      <div className="hidden sm:grid grid-cols-3 gap-3">
+                        <div className="flex flex-col gap-0 rounded-lg bg-blue-50 border-2 border-blue-400 overflow-hidden">
+                          <div className="text-center text-sm text-blue-600 font-semibold bg-blue-100/50 py-0 px-1 leading-tight">
+                            {match?.home_team?.flag_code?.toUpperCase()}
+                          </div>
+                          <div className="flex items-center justify-center gap-2 px-3 py-0 leading-tight">
+                            <div className="flex items-center gap-1 text-blue-600 font-semibold">
+                              <IconParticipants className="w-5 h-5" />
+                              <span className="text-base">{homeWins}</span>
+                            </div>
+                            {match?.home_team?.flag_code && (
+                              <FlagOnly
+                                flagCode={match.home_team.flag_code}
+                                size="md"
+                              />
+                            )}
+                            <div className="text-lg font-bold text-blue-800">
+                              {homeWinPct}%
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-0 rounded-lg bg-yellow-50 border-2 border-yellow-400 overflow-hidden">
+                          <div className="text-center text-sm text-yellow-600 font-semibold bg-yellow-100/50 py-0 px-1 uppercase">
+                            Empate
+                          </div>
+                          <div className="flex items-center justify-center gap-2 px-3 py-0 leading-tight">
+                            <div className="flex items-center gap-1 text-yellow-600 font-semibold">
+                              <IconParticipants className="w-5 h-5" />
+                              <span className="text-base">{draws}</span>
+                            </div>
+                            <div className="text-2xl">🟰</div>
+                            <div className="text-lg font-bold text-yellow-800">
+                              {drawPct}%
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex flex-col gap-0 rounded-lg bg-pink-50 border-2 border-pink-400 overflow-hidden">
+                          <div className="text-center text-sm text-pink-600 font-semibold bg-pink-100/50 py-0 px-1">
+                            {match?.away_team?.flag_code?.toUpperCase()}
+                          </div>
+                          <div className="flex items-center justify-center gap-2 px-3 py-0 leading-tight">
+                            <div className="flex items-center gap-1 text-pink-600 font-semibold">
+                              <IconParticipants className="w-5 h-5" />
+                              <span className="text-base">{awayWins}</span>
+                            </div>
+                            {match?.away_team?.flag_code && (
+                              <FlagOnly
+                                flagCode={match.away_team.flag_code}
+                                size="md"
+                              />
+                            )}
+                            <div className="text-lg font-bold text-pink-800">
+                              {awayWinPct}%
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {userPreds.length === 0 ? (
+                <p className="text-gray-400">Nenhum palpite registrado.</p>
+              ) : (
+                <>
+                  {isGameEnded && (() => {
                 const counts: Record<number, number> = { 20: 0, 15: 0, 10: 0, 5: 0, 0: 0 }
                 for (const p of userPreds) {
                   if (p.points !== null && p.points in counts) counts[p.points]++
@@ -338,7 +509,11 @@ export default function MatchPredictionsModal({
                   </tbody>
                 </table>
               </div>
+                </>
+              )}
             </div>
+          ) : (
+            <p className="text-gray-400">Nenhum palpite registrado.</p>
           )}
         </div>
       </div>

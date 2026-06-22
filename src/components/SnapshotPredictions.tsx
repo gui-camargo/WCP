@@ -72,28 +72,26 @@ export default function SnapshotPredictions({
     return ''
   }
 
-  const getScoreStats = () => {
-    const scores: Record<string, number> = {}
-    for (const p of predictions) {
-      const key = `${p.home_guess}x${p.away_guess}`
-      scores[key] = (scores[key] ?? 0) + 1
-    }
-    const entries = Object.entries(scores).sort((a, b) => b[1] - a[1])
-    return {
-      most: entries.length > 0 ? entries[0][0] : 'N/A',
-      mostCount: entries.length > 0 ? entries[0][1] : 0,
-      least: entries.length > 1 ? entries[entries.length - 1][0] : (entries.length > 0 ? entries[0][0] : 'N/A'),
-      leastCount: entries.length > 1 ? entries[entries.length - 1][1] : (entries.length > 0 ? entries[0][1] : 0),
-    }
+
+  const homeWins = predictions.filter(p => p.home_guess > p.away_guess).length
+  const draws = predictions.filter(p => p.home_guess === p.away_guess).length
+  const awayWins = predictions.filter(p => p.home_guess < p.away_guess).length
+  const total = predictions.length
+  const homeWinPct = total > 0 ? Math.round((homeWins / total) * 100) : 0
+  const drawPct = total > 0 ? Math.round((draws / total) * 100) : 0
+  const awayWinPct = total > 0 ? Math.round((awayWins / total) * 100) : 0
+
+  const pointsCounts: Record<number, number> = { 20: 0, 15: 0, 10: 0, 5: 0, 0: 0 }
+  for (const p of predictions) {
+    if (p.points !== null && p.points in pointsCounts) pointsCounts[p.points]++
   }
-
-  const scoreStats = getScoreStats()
-
-  const averagePoints = predictions.length > 0
-    ? (predictions.reduce((sum, p) => sum + (p.points ?? 0), 0) / predictions.length).toFixed(1)
-    : '0'
-
-  const cravedCount = predictions.filter(p => p.points === 20).length
+  const pointsEntries: [number, string, string, string][] = [
+    [20, '🤩', 'text-yellow-600', 'bg-yellow-50 border-yellow-300'],
+    [15, '😄', 'text-emerald-700', 'bg-emerald-50 border-emerald-200'],
+    [10, '😐', 'text-indigo-700', 'bg-indigo-50 border-indigo-200'],
+    [5, '😬', 'text-orange-700', 'bg-orange-50 border-orange-200'],
+    [0, '😵', 'text-red-700', 'bg-red-50 border-red-200'],
+  ]
 
   const realHomeWins = (homeScore ?? 0) > (awayScore ?? 0)
   const realAwayWins = (homeScore ?? 0) < (awayScore ?? 0)
@@ -156,38 +154,58 @@ export default function SnapshotPredictions({
           Palpites ({predictions.length})
         </h3>
 
-        {/* Stats Grid */}
+        {/* Stats Section */}
         <div className="mb-2">
-          <div className={`grid gap-1 ${isFinished ? 'grid-cols-2' : 'grid-cols-2'}`}>
-            <div className="text-center rounded bg-green-50 px-2 py-0.5 border border-green-200">
-              <p className="text-[10px] text-green-700 font-semibold">📊 Mais Comum</p>
-              <p style={{ paddingBottom: '6px' }} className="text-xs font-bold text-green-800">
-                {scoreStats.most} <span className="text-[9px] text-green-600">({scoreStats.mostCount}x)</span>
-              </p>
-            </div>
-            <div className="text-center rounded bg-orange-50 px-2 py-0.5 border border-orange-200">
-              <p className="text-[10px] text-orange-700 font-semibold">📉 Menos Comum</p>
-              <p style={{ paddingBottom: '6px' }} className="text-xs font-bold text-orange-800">
-                {scoreStats.least} <span className="text-[9px] text-orange-600">({scoreStats.leastCount}x)</span>
-              </p>
-            </div>
-            {isFinished && (
-              <div className="text-center rounded bg-blue-50 px-2 py-0.5 border border-blue-200">
-                <p className="text-[10px] text-blue-700 font-semibold">📈 Média</p>
-                <p style={{ paddingBottom: '6px' }} className="text-xs font-bold text-blue-800">
-                  {averagePoints} <span className="text-[9px] text-blue-600">pts</span>
-                </p>
+          {!isFinished ? (
+            <div>
+              <div className="flex rounded overflow-hidden h-2 mb-1.5">
+                <div className="bg-blue-500" style={{ width: `${homeWinPct}%` }} />
+                <div className="bg-yellow-400" style={{ width: `${drawPct}%` }} />
+                <div className="bg-pink-400" style={{ width: `${awayWinPct}%` }} />
               </div>
-            )}
-            {isFinished && (
-              <div className="text-center rounded bg-yellow-50 px-2 py-0.5 border border-yellow-200">
-                <p className="text-[10px] text-yellow-700 font-semibold">🤩 Cravadas</p>
-                <p style={{ paddingBottom: '6px' }} className="text-xs font-bold text-yellow-800">
-                  {cravedCount}
-                </p>
+              <div className="flex gap-1">
+                <div className="flex-1 flex flex-col rounded bg-blue-50 border-2 border-blue-400 overflow-hidden">
+                  <div style={{ paddingBottom: '3px' }} className="text-center text-[9px] text-blue-600 font-semibold bg-blue-100/50 px-1 leading-tight">
+                    {homeTeamName}
+                  </div>
+                  <div className="flex items-center justify-center gap-1 px-1 leading-tight">
+                    <span style={{ paddingBottom: '4px' }} className="text-[10px] text-blue-600 font-semibold">{homeWins}</span>
+                    {homeTeamFlagCode && <FlagOnly flagCode={homeTeamFlagCode} size="xs" />}
+                    <span style={{ paddingBottom: '4px' }} className="text-xs font-bold text-blue-800">{homeWinPct}%</span>
+                  </div>
+                </div>
+                <div className="flex-1 flex flex-col rounded bg-yellow-50 border-2 border-yellow-400 overflow-hidden">
+                  <div style={{ paddingBottom: '3px' }} className="text-center text-[10px] text-yellow-600 font-semibold bg-yellow-100/50 px-1 uppercase leading-tight">
+                    Empate
+                  </div>
+                  <div className="flex items-center justify-center gap-1 px-1 leading-tight">
+                    <span style={{ paddingBottom: '4px' }} className="text-[10px] text-yellow-600 font-semibold">{draws}</span>
+                    <span className="text-sm" style={{ paddingBottom: '4px' }}>🟰</span>
+                    <span style={{ paddingBottom: '4px' }} className="text-xs font-bold text-yellow-800">{drawPct}%</span>
+                  </div>
+                </div>
+                <div className="flex-1 flex flex-col rounded bg-pink-50 border-2 border-pink-400 overflow-hidden">
+                  <div style={{ paddingBottom: '3px' }} className="text-center text-[9px] text-pink-600 font-semibold bg-pink-100/50 px-1 leading-tight">
+                    {awayTeamName}
+                  </div>
+                  <div className="flex items-center justify-center gap-1 px-1 leading-tight">
+                    <span style={{ paddingBottom: '4px' }} className="text-[10px] text-pink-600 font-semibold">{awayWins}</span>
+                    {awayTeamFlagCode && <FlagOnly flagCode={awayTeamFlagCode} size="xs" />}
+                    <span style={{ paddingBottom: '4px' }} className="text-xs font-bold text-pink-800">{awayWinPct}%</span>
+                  </div>
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="grid grid-cols-5 rounded border border-gray-200 overflow-hidden text-center">
+              {pointsEntries.map(([pts, emoji, textColor, bgBorder]) => (
+                <div key={pts} className={`border-r last:border-r-0 border-gray-200 ${bgBorder}`}>
+                  <div style={{ paddingBottom: '4px' }} className={`py-0.5 text-[10px] font-extrabold border-b border-gray-200 ${textColor}`}>{emoji} {pts}</div>
+                  <div style={{ paddingBottom: '4px' }} className={`py-0.5 text-xs font-extrabold ${textColor}`}>{pointsCounts[pts]}</div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="space-y-1">
