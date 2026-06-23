@@ -19,6 +19,7 @@ import GroupPredictionsPage from '@/pages/GroupPredictionsPage'
 import PodiumPredictionsPage from '@/pages/PodiumPredictionsPage'
 import MeusPalpitesPage from '@/pages/MeusPalpitesPage'
 import PaymentPendingPage from '@/pages/PaymentPendingPage'
+import ParticipanteStatsPage from '@/pages/ParticipanteStatsPage'
 
 const LAST_PATH_KEY = 'wcp-last-path'
 const RESTORE_BLOCKLIST = ['/login', '/cadastro', '/esqueceu-senha', '/reset-senha']
@@ -75,6 +76,7 @@ export default function App() {
                 <Route path="/bolao/:poolId/classificacao" element={<GroupPredictionsPage />} />
                 <Route path="/bolao/:poolId/colocados" element={<PodiumPredictionsPage />} />
                 <Route path="/bolao/:poolId/admin" element={<AdminPage />} />
+                <Route path="/bolao/:poolId/participante/:userId" element={<ParticipanteStatsPage />} />
               </Route>
             </Route>
           </Route>

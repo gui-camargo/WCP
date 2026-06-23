@@ -129,6 +129,14 @@ export interface Database {
         Insert: { pool_id: string; user_id: string; champion_id: string; vice_id: string; third_id: string }
         Update: { champion_id?: string; vice_id?: string; third_id?: string }
       }
+      leaderboard_snapshots: {
+        Row: {
+          id: string; pool_id: string; match_id: string; user_id: string
+          rank: number; total_points: number; created_at: string
+        }
+        Insert: never
+        Update: never
+      }
     }
     Views: {
       leaderboard: {
@@ -154,6 +162,15 @@ export interface Database {
       calculate_group_bonus_points: {
         Args: { p_group_prediction_id: string }
         Returns: number
+      }
+      get_match_ranking_delta: {
+        Args: { p_match_id: string }
+        Returns: Array<{
+          user_id: string
+          rank_after: number
+          rank_before: number | null
+          position_delta: number | null
+        }>
       }
     }
     Enums: Record<string, never>

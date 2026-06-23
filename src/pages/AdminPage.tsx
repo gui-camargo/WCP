@@ -177,6 +177,7 @@ export default function AdminPage() {
   const [openSnapshotMatch, setOpenSnapshotMatch] = useState<string | null>(
     null,
   );
+  const [snapshotRankingDeltas, setSnapshotRankingDeltas] = useState<Map<string, { rank_after: number; position_delta: number | null }>>(new Map());
   const [exportingImage, setExportingImage] = useState(false);
   const [podiumStandingDraft, setPodiumStandingDraft] = useState<PodiumStandingDraft>({ champion_id: '', vice_id: '', third_id: '' });
   const [savingPodiumStanding, setSavingPodiumStanding] = useState(false);
@@ -252,6 +253,17 @@ export default function AdminPage() {
   useEffect(() => {
     if (poolId) loadData();
   }, [poolId]);
+
+  useEffect(() => {
+    if (!openSnapshotMatch) { setSnapshotRankingDeltas(new Map()); return }
+    const match = matches.find((m) => m.id === openSnapshotMatch)
+    if (match?.status !== 'encerrado') return
+    supabase.rpc('get_match_ranking_delta', { p_match_id: openSnapshotMatch }).then(({ data }) => {
+      const map = new Map<string, { rank_after: number; position_delta: number | null }>()
+      for (const row of data ?? []) map.set(row.user_id, { rank_after: row.rank_after, position_delta: row.position_delta })
+      setSnapshotRankingDeltas(map)
+    })
+  }, [openSnapshotMatch]);
 
   useEffect(() => {
     if (selectedRoundId) loadMatches(selectedRoundId);
@@ -2588,7 +2600,7 @@ export default function AdminPage() {
       {/* Snapshot Modal */}
       {openSnapshotMatch && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto w-full max-w-lg">
+          <div className="bg-white rounded-xl shadow-2xl max-h-[90vh] overflow-y-auto w-full max-w-xl">
             <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
               <h2 className="text-lg font-bold text-gray-800">
                 Snapshot de Palpites
@@ -2604,7 +2616,11 @@ export default function AdminPage() {
             <div className="p-6">
               {(() => {
                 const match = matches.find((m) => m.id === openSnapshotMatch);
-                const preds = predictionsByMatch[openSnapshotMatch] ?? [];
+                const preds = (predictionsByMatch[openSnapshotMatch] ?? []).map((p) => ({
+                  ...p,
+                  rank_after: snapshotRankingDeltas.size > 0 ? (snapshotRankingDeltas.get(p.user_id)?.rank_after ?? null) : undefined,
+                  position_delta: snapshotRankingDeltas.size > 0 ? (snapshotRankingDeltas.get(p.user_id)?.position_delta ?? null) : undefined,
+                }));
 
                 if (!match)
                   return <p className="text-gray-500">Jogo não encontrado</p>;

@@ -7,6 +7,8 @@ interface Prediction {
   home_guess: number
   away_guess: number
   points: number | null
+  rank_after?: number | null
+  position_delta?: number | null
 }
 
 interface SnapshotPredictionsProps {
@@ -43,9 +45,16 @@ export default function SnapshotPredictions({
     return date.toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })
   }
 
-  // Ordena pelos pontos (maior primeiro) para jogos encerrados
+  const hasRankData = predictions.some((p) => p.rank_after != null)
+
+  // Ordena pela posição do ranking (após esse jogo) quando disponível, senão por pontos
   const sortedPredictions = isFinished
     ? [...predictions].sort((a, b) => {
+        if (hasRankData) {
+          const aRank = a.rank_after ?? 9999
+          const bRank = b.rank_after ?? 9999
+          return aRank - bRank
+        }
         const aPoints = a.points ?? 0
         const bPoints = b.points ?? 0
         if (bPoints !== aPoints) return bPoints - aPoints
@@ -110,7 +119,7 @@ export default function SnapshotPredictions({
   return (
     <div
       id={`snapshot-${matchId}`}
-      className="w-full max-w-lg mx-auto bg-white rounded-xl border border-gray-200 overflow-hidden"
+      className="w-full max-w-xl mx-auto bg-white rounded-xl border border-gray-200 overflow-hidden"
       style={{ fontFamily: 'system-ui, -apple-system, sans-serif' }}
     >
       {/* Header */}
@@ -120,7 +129,7 @@ export default function SnapshotPredictions({
             {formatTime(kickoffAt)} • {venue || '-'}
           </p>
           <div className="flex items-center justify-center gap-2">
-            <span style={{ paddingBottom: '6px' }}>
+            <span>
               <TeamWithFlag
                 name={homeTeamName}
                 flagCode={homeTeamFlagCode}
@@ -131,10 +140,10 @@ export default function SnapshotPredictions({
                 className="font-medium text-gray-800"
               />
             </span>
-            <div style={{ paddingBottom: '6px' }} className={`whitespace-nowrap text-center px-2 py-0 text-lg font-extrabold rounded ${isFinished ? 'text-black bg-gray-100' : 'text-gray-400'}`}>
+            <div className={`whitespace-nowrap text-center px-2 py-0 text-lg font-extrabold rounded ${isFinished ? 'text-black bg-gray-100' : 'text-gray-400'}`}>
               {isFinished ? `${homeScore ?? '-'} × ${awayScore ?? '-'}` : '- × -'}
             </div>
-            <span style={{ paddingBottom: '6px' }}>
+            <span>
               <TeamWithFlag
                 name={awayTeamName}
                 flagCode={awayTeamFlagCode}
@@ -220,7 +229,27 @@ export default function SnapshotPredictions({
 
             return (
               <div key={pred.user_id} style={{ display: 'flex', alignItems: 'stretch', gap: '4px', background: 'white', border: '2px solid #e5e7eb', borderRadius: '8px', padding: '4px 8px', boxSizing: 'border-box', minHeight: '28px', overflow: 'visible' }}>
-                <span style={{ fontSize: '10px', lineHeight: '20px', fontWeight: 500, color: '#1f2937', whiteSpace: 'nowrap', overflow: 'visible', flex: 1, minWidth: 0, alignSelf: 'center', display: 'block' }}>
+                <span style={{ fontSize: '10px', lineHeight: '20px', fontWeight: 500, color: '#1f2937', whiteSpace: 'nowrap', overflow: 'visible', flex: 1, minWidth: 0, alignSelf: 'center', display: 'flex', alignItems: 'center', gap: 3 }}>
+                  {pred.position_delta != null ? (
+                    pred.position_delta === 0
+                      ? <span style={{ fontSize: '11px', color: '#94a3b8', fontWeight: 600, width: 20, textAlign: 'center', flexShrink: 0 }}>—</span>
+                      : pred.position_delta > 0
+                        ? <span style={{ fontSize: '11px', color: '#16a34a', fontWeight: 700, width: 20, textAlign: 'center', flexShrink: 0 }}>▲{pred.position_delta}</span>
+                        : <span style={{ fontSize: '11px', color: '#dc2626', fontWeight: 700, width: 20, textAlign: 'center', flexShrink: 0 }}>▼{Math.abs(pred.position_delta)}</span>
+                  ) : <span style={{ width: 20, flexShrink: 0 }} />}
+                  {pred.rank_after != null ? (
+                    <span style={{
+                      fontSize: '9px', fontWeight: 700, borderRadius: '4px', lineHeight: '14px',
+                      flexShrink: 0, width: 20, textAlign: 'center', display: 'inline-block', paddingBottom: '10px',
+                      ...(pred.rank_after === 1
+                        ? { border: '1px solid #f59e0b', background: '#fef3c7', color: '#92400e' }
+                        : pred.rank_after === 2
+                          ? { border: '1px solid #94a3b8', background: '#f1f5f9', color: '#334155' }
+                          : pred.rank_after === 3
+                            ? { border: '1px solid #cd7c3a', background: '#fef6ee', color: '#9a3412' }
+                            : { border: '1px solid #d1d5db', background: '#f3f4f6', color: '#374151' })
+                    }}>{pred.rank_after}</span>
+                  ) : <span style={{ width: 20, flexShrink: 0 }} />}
                   {pred.user_name}
                 </span>
 
@@ -230,11 +259,11 @@ export default function SnapshotPredictions({
                       <FlagOnly flagCode={homeTeamFlagCode} size="sm" />
                     </div>
                   )}
-                  <span className={getComponentColor(homeGoalCorrect)} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', fontSize: '10px', fontWeight: 700, borderRadius: '3px', border: '1px solid', boxSizing: 'border-box', verticalAlign: 'middle', paddingBottom: '8px' }}>
+                  <span className={getComponentColor(homeGoalCorrect)} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', fontSize: '10px', fontWeight: 700, borderRadius: '3px', border: '1px solid', boxSizing: 'border-box', verticalAlign: 'middle', paddingBottom: '10px' }}>
                     {pred.home_guess}
                   </span>
                   <span style={{ color: '#9ca3af', fontWeight: 700, fontSize: '10px', verticalAlign: 'middle' }}>×</span>
-                  <span className={getComponentColor(awayGoalCorrect)} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', fontSize: '10px', fontWeight: 700, borderRadius: '3px', border: '1px solid', boxSizing: 'border-box', verticalAlign: 'middle', paddingBottom: '8px' }}>
+                  <span className={getComponentColor(awayGoalCorrect)} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', fontSize: '10px', fontWeight: 700, borderRadius: '3px', border: '1px solid', boxSizing: 'border-box', verticalAlign: 'middle', paddingBottom: '10px' }}>
                     {pred.away_guess}
                   </span>
                   {awayTeamFlagCode && (
@@ -245,11 +274,11 @@ export default function SnapshotPredictions({
                 </div>
 
                 {isFinished && pred.points !== null ? (
-                  <span className={getPointsColor(pred.points)} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 700, borderRadius: '999px', border: '1px solid currentColor', fontSize: '10px', height: '20px', padding: '0 6px', paddingBottom: '8px', alignSelf: 'center', boxSizing: 'border-box' }}>
+                  <span className={getPointsColor(pred.points)} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, fontWeight: 700, borderRadius: '999px', border: '1px solid currentColor', fontSize: '12px', height: '22px', width: '42px', paddingBottom: '10px', alignSelf: 'center', boxSizing: 'border-box' }}>
                     {getPointsEmoji(pred.points)} {pred.points}
                   </span>
                 ) : (
-                  <span style={{ width: '22px', textAlign: 'center', color: '#9ca3af', fontSize: '10px', lineHeight: '20px', flexShrink: 0, alignSelf: 'center' }}>—</span>
+                  <span style={{ width: '38px', textAlign: 'center', color: '#9ca3af', fontSize: '10px', lineHeight: '20px', flexShrink: 0, alignSelf: 'center' }}>—</span>
                 )}
               </div>
             )

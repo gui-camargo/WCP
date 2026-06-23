@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/contexts/AuthContext';
 import TeamWithFlag from '@/components/TeamWithFlag';
@@ -81,6 +81,7 @@ const brlFormatter = new Intl.NumberFormat('pt-BR', {
 export default function BolaoPage() {
   const { poolId } = useParams();
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [poolName, setPoolName] = useState('');
   const [rounds, setRounds] = useState<Round[]>([]);
   const [topRanking, setTopRanking] = useState<LeaderboardRow[]>([]);
@@ -895,32 +896,50 @@ export default function BolaoPage() {
                     row.rank === 1 ? '🥇' : row.rank === 2 ? '🥈' : '🥉';
                   const outerClass = isTop
                     ? row.rank === 1
-                      ? 'bg-yellow-50 border border-yellow-200 shadow-md'
+                      ? 'bg-gradient-to-r from-yellow-200 via-yellow-50 to-white border border-yellow-300 shadow-md'
                       : row.rank === 2
-                        ? 'bg-slate-50 border border-gray-200 shadow-sm'
-                        : 'bg-amber-50 border border-amber-200 shadow-sm'
+                        ? 'bg-gradient-to-r from-slate-200 via-slate-100 to-white border border-slate-300 shadow-sm'
+                        : 'bg-gradient-to-r from-amber-300 via-amber-200 to-amber-100 border border-amber-300'
                     : 'bg-gradient-to-r from-slate-50 to-white border border-gray-100';
+
+                  const nameColorClass = row.rank === 1
+                    ? 'text-yellow-900'
+                    : row.rank === 2
+                      ? 'text-slate-700'
+                      : row.rank === 3
+                        ? 'text-amber-950'
+                        : 'text-gray-700';
+
+                  const pointsSizeClass = row.rank === 1
+                    ? 'text-base sm:text-lg'
+                    : row.rank === 2
+                      ? 'text-sm sm:text-base'
+                      : row.rank === 3
+                        ? 'text-xs sm:text-sm'
+                        : 'text-xs';
+
+                  const pointsPadClass = row.rank === 1
+                    ? 'px-3 py-1'
+                    : row.rank === 2
+                      ? 'px-2.5 py-0.5'
+                      : 'px-2 py-0.5';
 
                   return (
                     <div
                       key={row.user_id}
-                      className={`flex items-center justify-between rounded-xl px-2 py-2 ${outerClass}`}
+                      onClick={() => navigate(`/bolao/${poolId}/participante/${row.user_id}`)}
+                      className={`flex items-center justify-between rounded-xl px-2 py-2 cursor-pointer transition-colors hover:brightness-95 ${outerClass}`}
                     >
                       <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={
-                            isTop
-                              ? 'text-xl sm:text-2xl shrink-0'
-                              : 'text-base shrink-0'
-                          }
-                        >
-                          {isTop ? medal : `#${row.rank}`}
-                        </span>
+                        {isTop
+                          ? <span className="text-xl sm:text-2xl shrink-0 leading-none">{medal}</span>
+                          : <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-600 text-xs font-bold shrink-0">{row.rank}</span>
+                        }
                         <p
                           className={
                             isTop
-                              ? 'text-sm sm:text-sm font-extrabold text-gray-800 truncate'
-                              : 'text-sm text-gray-700 font-medium truncate'
+                              ? `text-xs sm:text-sm font-extrabold truncate ${nameColorClass}`
+                              : 'text-xs sm:text-sm text-gray-700 font-medium truncate'
                           }
                         >
                           {row.user_name}
@@ -928,25 +947,23 @@ export default function BolaoPage() {
                             <span
                               title="Você"
                               aria-label="Você (esta é a sua conta)"
-                              className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm"
+                              className="mx-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm"
                             >
                               você
                             </span>
                           )}
+                          <svg className="inline-block w-3 h-3 ml-1 align-middle text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M9 18l6-6-6-6" />
+                          </svg>
                         </p>
                       </div>
                       <div className="shrink-0">
                         <span
                           className={
-                            isTop
-                              ? 'inline-flex items-center px-3 py-1 rounded-full font-bold text-base sm:text-lg ' +
-                                (row.total_points >= 100
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  : 'bg-white text-brand-700 border border-gray-100')
-                              : 'inline-flex items-center px-2 py-0.5 rounded-full font-bold text-xs ' +
-                                (row.total_points >= 100
-                                  ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                                  : 'bg-white text-brand-700 border border-gray-100')
+                            `inline-flex items-center rounded-full font-bold ${pointsSizeClass} ${pointsPadClass} ` +
+                            (row.total_points >= 100
+                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                              : 'bg-white text-brand-700 border border-gray-100')
                           }
                         >
                           {row.total_points}
@@ -960,18 +977,24 @@ export default function BolaoPage() {
 
             {myRanking && !topRanking.some((r) => r.user_id === user?.id) && (
               <div className="mt-4 pt-3 border-t border-gray-100">
-                <div className="flex items-center justify-between rounded-xl px-2 py-2 bg-gradient-to-r from-brand-50 to-sky-50 border border-brand-100">
+                <div
+                  onClick={() => navigate(`/bolao/${poolId}/participante/${myRanking.user_id}`)}
+                  className="flex items-center justify-between rounded-xl px-2 py-2 bg-gradient-to-r from-brand-50 to-sky-50 border border-brand-100 cursor-pointer transition-colors hover:brightness-95"
+                >
                   <div className="flex items-center gap-2">
-                    <span className="text-base">#{myRanking.rank}</span>
+                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white border border-brand-200 text-brand-700 text-xs font-bold shrink-0">{myRanking.rank}</span>
                     <p className="text-sm font-bold text-brand-700 truncate">
                       {myRanking.user_name}{' '}
                       <span
                         title="Você"
                         aria-label="Você (esta é a sua conta)"
-                        className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm"
+                        className="mx-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm"
                       >
                         você
                       </span>
+                      <svg className="inline-block w-3 h-3 ml-1 align-middle text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
                     </p>
                   </div>
                   <div>

@@ -47,10 +47,12 @@ export default function MatchPredictionsModal({
   currentUserId,
 }: MatchPredictionsModalProps) {
   const [liveMatch, setLiveMatch] = useState<Pick<MatchRef, 'status' | 'home_score' | 'away_score'> | null>(null)
+  const [rankingDeltas, setRankingDeltas] = useState<Map<string, { rank_after: number; position_delta: number | null }>>(new Map())
 
   useEffect(() => {
     if (!open || !match) return
     setLiveMatch(null)
+    setRankingDeltas(new Map())
 
     const channel = supabase
       .channel(`match-live-${match.id}`)
@@ -64,10 +66,36 @@ export default function MatchPredictionsModal({
       )
       .subscribe()
 
+    if (match.status === 'encerrado') {
+      supabase.rpc('get_match_ranking_delta', { p_match_id: match.id }).then(({ data }) => {
+        const map = new Map<string, { rank_after: number; position_delta: number | null }>()
+        for (const row of data ?? []) map.set(row.user_id, { rank_after: row.rank_after, position_delta: row.position_delta })
+        setRankingDeltas(map)
+      })
+    }
+
     return () => { supabase.removeChannel(channel) }
   }, [open, match?.id])
 
   if (!open || !match) return null
+
+  const DeltaBadge = ({ delta }: { delta: number | null | undefined }) => {
+    const base = "inline-flex items-center justify-center w-5 shrink-0 text-[11px] font-bold"
+    if (delta == null) return <span className={base} />
+    if (delta === 0)   return <span className={`${base} text-slate-400 font-semibold`}>—</span>
+    if (delta > 0)     return <span className={`${base} text-emerald-600`}>▲{delta}</span>
+    return              <span className={`${base} text-red-500`}>▼{Math.abs(delta)}</span>
+  }
+
+  const RankBadge = ({ rank }: { rank: number | null | undefined }) => {
+    if (rank == null) return <span className="inline-flex w-5 h-5 shrink-0" />
+    const cls =
+      rank === 1 ? 'border-yellow-400 bg-yellow-100 text-yellow-800' :
+      rank === 2 ? 'border-slate-400 bg-slate-100 text-slate-700' :
+      rank === 3 ? 'border-orange-400 bg-orange-100 text-orange-800' :
+                   'border-gray-300 bg-gray-100 text-gray-600'
+    return <span className={`inline-flex items-center justify-center text-[10px] font-bold rounded border w-5 h-5 shrink-0 ${cls}`}>{rank}</span>
+  }
 
   const currentStatus = liveMatch?.status ?? match.status
   const currentHomeScore = liveMatch?.home_score ?? match.home_score
@@ -101,7 +129,14 @@ export default function MatchPredictionsModal({
     return 'border-gray-200'
   }
 
-  const sortedPreds = [...userPreds].sort((a, b) => a.user_name.localeCompare(b.user_name, 'pt-BR'))
+  const sortedPreds = [...userPreds].sort((a, b) => {
+    if (rankingDeltas.size > 0) {
+      const aRank = rankingDeltas.get(a.user_id)?.rank_after ?? 9999
+      const bRank = rankingDeltas.get(b.user_id)?.rank_after ?? 9999
+      return aRank - bRank
+    }
+    return a.user_name.localeCompare(b.user_name, 'pt-BR')
+  })
 
   const isGameEnded = currentStatus === 'encerrado'
   const isGameLive = currentStatus === 'ao_vivo'
@@ -409,33 +444,35 @@ export default function MatchPredictionsModal({
                   const awayGoalCorrect = p.away_guess === currentAwayScore
 
                   return (
-                    <div key={i} className={`rounded-xl border-2 bg-white px-3 py-2 flex items-center gap-2 ${getPointsBorder(p.points)}`}>
+                    <div key={i} className={`rounded-xl border-2 bg-white pl-1.5 pr-3 py-2 flex items-center gap-1.5 ${getPointsBorder(p.points)}`}>
+                      {rankingDeltas.size > 0 && <DeltaBadge delta={rankingDeltas.get(p.user_id)?.position_delta} />}
+                      {rankingDeltas.size > 0 && <RankBadge rank={rankingDeltas.get(p.user_id)?.rank_after} />}
                       <span className={`text-[11px] text-gray-800 truncate flex-1 min-w-0 ${p.user_id === currentUserId ? 'font-bold' : 'font-medium'}`}>
                         {p.user_name}
                       </span>
 
-                      <div className="flex items-center gap-1 shrink-0">
+                      <div className="flex items-center gap-0.5 shrink-0">
                         {match.home_team?.flag_code && (
-                          <div className={`rounded p-0.5 flex items-center justify-center overflow-hidden ${getBannerColor(winnerCorrect)}`}>
-                            <FlagOnly flagCode={match.home_team.flag_code} size="sm" />
+                          <div className={`rounded p-px flex items-center justify-center overflow-hidden ${getBannerColor(winnerCorrect)}`}>
+                            <FlagOnly flagCode={match.home_team.flag_code} size="xs" />
                           </div>
                         )}
-                        <span className={`inline-flex justify-center font-bold w-7 py-0.5 rounded border text-xs ${getComponentColor(homeGoalCorrect)}`}>{p.home_guess}</span>
-                        <span className="text-gray-400 font-bold text-xs">×</span>
-                        <span className={`inline-flex justify-center font-bold w-7 py-0.5 rounded border text-xs ${getComponentColor(awayGoalCorrect)}`}>{p.away_guess}</span>
+                        <span className={`inline-flex justify-center font-bold w-5 py-px rounded border text-[10px] ${getComponentColor(homeGoalCorrect)}`}>{p.home_guess}</span>
+                        <span className="text-gray-400 font-bold text-[10px]">×</span>
+                        <span className={`inline-flex justify-center font-bold w-5 py-px rounded border text-[10px] ${getComponentColor(awayGoalCorrect)}`}>{p.away_guess}</span>
                         {match.away_team?.flag_code && (
-                          <div className={`rounded p-0.5 flex items-center justify-center overflow-hidden ${getBannerColor(winnerCorrect)}`}>
-                            <FlagOnly flagCode={match.away_team.flag_code} size="sm" />
+                          <div className={`rounded p-px flex items-center justify-center overflow-hidden ${getBannerColor(winnerCorrect)}`}>
+                            <FlagOnly flagCode={match.away_team.flag_code} size="xs" />
                           </div>
                         )}
                       </div>
 
                       {p.points !== null ? (
-                        <span className={`inline-flex justify-center shrink-0 font-bold w-16 py-0.5 rounded-full border text-xs ${getPointsColor(p.points)}`}>
+                        <span className={`inline-flex justify-center shrink-0 font-bold w-14 py-0.5 rounded-full border text-[11px] ${getPointsColor(p.points)}`}>
                           {getPointsEmoji(p.points)} {p.points}
                         </span>
                       ) : (
-                        <span className="inline-flex justify-center shrink-0 w-16 text-gray-400 font-medium text-xs">—</span>
+                        <span className="inline-flex justify-center shrink-0 w-14 text-gray-400 font-medium text-[11px]">—</span>
                       )}
                     </div>
                   )
@@ -464,10 +501,12 @@ export default function MatchPredictionsModal({
                       return (
                         <tr key={i} className="hover:bg-gray-50">
                           <td className={`px-4 py-2 border-l-4 ${getPointsBorder(p.points)}`}>
-                            <span className={`text-[13px] text-gray-800 ${p.user_id === currentUserId ? 'font-bold' : 'font-medium'}`}>
+                            <span className={`text-[13px] text-gray-800 inline-flex items-center gap-1 ${p.user_id === currentUserId ? 'font-bold' : 'font-medium'}`}>
+                              {rankingDeltas.size > 0 && <DeltaBadge delta={rankingDeltas.get(p.user_id)?.position_delta} />}
+                              {rankingDeltas.size > 0 && <RankBadge rank={rankingDeltas.get(p.user_id)?.rank_after} />}
                               {p.user_name}
                               {p.user_id === currentUserId && (
-                                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm">você</span>
+                                <span className="ml-1 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm">você</span>
                               )}
                             </span>
                           </td>

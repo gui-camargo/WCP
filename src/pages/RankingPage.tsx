@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useParams } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import BackButton from '@/components/BackButton'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -20,6 +20,7 @@ interface LeaderboardRow {
 export default function RankingPage() {
   const { poolId } = useParams()
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [rows, setRows] = useState<LeaderboardRow[]>([])
   const [nameFilterOpen, setNameFilterOpen] = useState(false)
   const [nameFilter, setNameFilter] = useState('')
@@ -167,10 +168,42 @@ export default function RankingPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredRows.map(r => (
-                <tr key={r.user_id} className={r.user_id === user?.id ? 'bg-brand-50 font-semibold' : 'hover:bg-gray-50'}>
-                  <td className="px-2 sm:px-4 py-3 text-center text-sm sm:text-lg align-middle">{r.rank <= 3 ? <span className="text-xl sm:text-2xl leading-none">{medals[r.rank - 1]}</span> : <span className="text-sm">{r.rank}</span>}</td>
-                  <td className="px-4 py-3 align-middle">{r.user_name}{r.user_id === user?.id && <span title="Você" aria-label="Você (esta é a sua conta)" className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-brand-100 text-brand-700 border border-brand-200 shadow-sm">você</span>}</td>
+              {filteredRows.map(r => {
+                const rowBg = r.rank === 1
+                  ? 'bg-gradient-to-r from-yellow-300 via-yellow-200 to-yellow-50 hover:brightness-95'
+                  : r.rank === 2
+                    ? 'bg-gradient-to-r from-slate-200 via-slate-100 to-white hover:brightness-95'
+                    : r.rank === 3
+                      ? 'bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50 hover:brightness-95'
+                      : r.user_id === user?.id
+                        ? 'bg-brand-50 font-semibold hover:bg-brand-100'
+                        : 'hover:bg-brand-50';
+                const nameColor = r.rank === 1
+                  ? 'text-yellow-900 font-extrabold'
+                  : r.rank === 2
+                    ? 'text-slate-700 font-extrabold'
+                    : r.rank === 3
+                      ? 'text-amber-950 font-extrabold'
+                      : '';
+                return (
+                <tr
+                  key={r.user_id}
+                  onClick={() => navigate(`/bolao/${poolId}/participante/${r.user_id}`)}
+                  className={`cursor-pointer transition-colors ${rowBg}`}
+                >
+                  <td className="px-2 sm:px-4 py-3 text-center align-middle">
+                    {r.rank <= 3
+                      ? <span className="text-xl sm:text-2xl leading-none">{medals[r.rank - 1]}</span>
+                      : <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-600 text-xs font-bold mx-auto">{r.rank}</span>
+                    }
+                  </td>
+                  <td className="px-4 py-3 align-middle">
+                    <span className={`text-xs sm:text-sm leading-snug ${nameColor}`}>{r.user_name}</span>
+                    {r.user_id === user?.id && <span title="Você" aria-label="Você (esta é a sua conta)" className="mx-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-brand-100 text-brand-700 border border-brand-200 shadow-sm">você</span>}
+                    <svg className="inline-block w-3 h-3 ml-1 align-middle text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
+                  </td>
                   <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(20)}>{r.c20 ?? 0}</span></td>
                   <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(15)}>{r.c15 ?? 0}</span></td>
                   <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(10)}>{r.c10 ?? 0}</span></td>
@@ -180,7 +213,8 @@ export default function RankingPage() {
                     <span className={'inline-flex items-center px-3 py-1 rounded-full font-bold text-lg sm:text-xl ' + (r.total_points >= 100 ? 'bg-accent-50 text-accent-700 border border-accent-200' : 'bg-white text-brand-700 border border-gray-100')}>{r.total_points}</span>
                   </td>
                 </tr>
-              ))}
+                );
+              })}
               {filteredRows.length === 0 && (
                 <tr>
                   <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
