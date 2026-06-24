@@ -146,6 +146,7 @@ export interface Database {
           user_name: string
           total_points: number
           rank: number
+          bonus_points: number
           c20: number
           c15: number
           c10: number

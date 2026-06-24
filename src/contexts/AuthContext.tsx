@@ -85,19 +85,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    let isMounted = true
+    let initialSessionHandled = false
+
+    // resolveLoading clears the fallback timer and sets loading=false exactly once.
+    // We must not clear the timer before setLoading(false) is actually called,
+    // otherwise a hanging loadProfile would leave the app stuck with no fallback.
+    let initTimer: ReturnType<typeof setTimeout>
+
+    const resolveLoading = () => {
+      clearTimeout(initTimer)
+      if (isMounted) setLoading(false)
+    }
+
+    // If nothing resolves loading within 8s, fall back to unauthenticated so the
+    // user reaches /login instead of being stuck on a blank loading screen.
+    initTimer = setTimeout(() => {
+      if (isMounted) {
+        console.warn('[Auth] init:timeout - treating as unauthenticated')
+        resolveLoading()
+      }
+    }, 8000)
+
+    function applyInitialSession(session: Session | null) {
+      if (!isMounted || initialSessionHandled) return
+      initialSessionHandled = true
       setSession(session)
       setUser(session?.user ?? null)
       if (session?.user) {
-        loadProfile(session.user.id).finally(() => setLoading(false))
+        loadProfile(session.user.id).finally(resolveLoading)
       } else {
-        setProfile(null)
-        setPaymentStatusByPool({})
-        setLoading(false)
+        resolveLoading()
+      }
+    }
+
+    // getSession() is the primary path per Supabase's recommended pattern.
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => applyInitialSession(session))
+      .catch(() => { if (!initialSessionHandled) resolveLoading() })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (!isMounted) return
+      if (!initialSessionHandled) {
+        // INITIAL_SESSION race with getSession() - whichever fires first wins
+        applyInitialSession(session)
+      } else {
+        // Subsequent auth changes (sign-in, sign-out, token refresh)
+        setSession(session)
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          loadProfile(session.user.id).finally(() => {
+            if (isMounted) setLoading(false)
+          })
+        } else {
+          setProfile(null)
+          setPaymentStatusByPool({})
+          setLoading(false)
+        }
       }
     })
 
-    return () => subscription.unsubscribe()
+    return () => {
+      isMounted = false
+      clearTimeout(initTimer)
+      subscription.unsubscribe()
+    }
   }, [])
 
   async function signIn(email: string, password: string) {

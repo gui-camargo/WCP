@@ -67,7 +67,7 @@ export default function MatchPredictionsModal({
       .subscribe()
 
     if (match.status === 'encerrado') {
-      supabase.rpc('get_match_ranking_delta', { p_match_id: match.id }).then(({ data }) => {
+      ;(supabase as any).rpc('get_match_ranking_delta', { p_match_id: match.id }).then(({ data }: any) => {
         const map = new Map<string, { rank_after: number; position_delta: number | null }>()
         for (const row of data ?? []) map.set(row.user_id, { rank_after: row.rank_after, position_delta: row.position_delta })
         setRankingDeltas(map)

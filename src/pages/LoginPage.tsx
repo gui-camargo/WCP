@@ -24,7 +24,7 @@ export default function LoginPage() {
   useEffect(() => {
     if (authLoading || !user || !profile) return
     const lastPath = localStorage.getItem(LAST_PATH_KEY)
-    if (lastPath) {
+    if (lastPath && lastPath !== '/') {
       navigate(lastPath, { replace: true })
     } else if (profile.active_pool_id) {
       navigate(`/bolao/${profile.active_pool_id}`, { replace: true })

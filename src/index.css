@@ -56,3 +56,63 @@
     transform: translateY(0);
   }
 }
+
+@keyframes shine-sweep {
+  0%   { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+.text-gold-shine {
+  background: linear-gradient(
+    90deg,
+    #92400e 0%,
+    #b45309 20%,
+    #fde68a 42%,
+    #ffffff 50%,
+    #fde68a 58%,
+    #b45309 80%,
+    #92400e 100%
+  );
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine-sweep 14s linear infinite;
+}
+
+.text-silver-shine {
+  background: linear-gradient(
+    90deg,
+    #334155 0%,
+    #475569 20%,
+    #cbd5e1 42%,
+    #ffffff 50%,
+    #cbd5e1 58%,
+    #475569 80%,
+    #334155 100%
+  );
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: shine-sweep 14s linear infinite;
+}
+
+.text-bronze-shine {
+  background: linear-gradient(
+    90deg,
+    #7c2d12 0%,
+    #a16207 20%,
+    #e8b96a 42%,
+    #fde9c2 50%,
+    #e8b96a 58%,
+    #a16207 80%,
+    #7c2d12 100%
+  );
+  background-size: 250% auto;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
+  animation: shine-sweep 14s linear infinite;
+}

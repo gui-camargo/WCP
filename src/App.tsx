@@ -22,7 +22,7 @@ import PaymentPendingPage from '@/pages/PaymentPendingPage'
 import ParticipanteStatsPage from '@/pages/ParticipanteStatsPage'
 
 const LAST_PATH_KEY = 'wcp-last-path'
-const RESTORE_BLOCKLIST = ['/login', '/cadastro', '/esqueceu-senha', '/reset-senha']
+const RESTORE_BLOCKLIST = ['/', '/login', '/cadastro', '/esqueceu-senha', '/reset-senha']
 
 function RouteTracker() {
   const location = useLocation()
@@ -38,17 +38,20 @@ function RootRedirect() {
   const { user, profile, loading } = useAuth()
 
   // Fast path: redirect immediately to last visited page.
-  // PrivateRoute handles the auth check from there.
+  // PrivateRoute handles the auth check from there. Never restore the root
+  // itself, otherwise we'd Navigate to "/" in an infinite no-op loop.
   const lastPath = localStorage.getItem(LAST_PATH_KEY)
-  if (lastPath) return <Navigate to={lastPath} replace />
+  if (lastPath && lastPath !== '/') return <Navigate to={lastPath} replace />
 
   // No saved path: wait for auth + profile before deciding where to go.
   if (loading) {
     return <div className="flex items-center justify-center h-screen text-gray-500">Carregando...</div>
   }
   if (!user) return <Navigate to="/login" replace />
+  // Logged in: go straight to the bolao. A user without an active pool yet is
+  // sent to /dashboard, which resolves the default pool and forwards to /bolao.
   if (profile?.active_pool_id) return <Navigate to={`/bolao/${profile.active_pool_id}`} replace />
-  return <Navigate to="/login" replace />
+  return <Navigate to="/dashboard" replace />
 }
 
 export default function App() {

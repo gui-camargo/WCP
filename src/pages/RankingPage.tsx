@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import BackButton from '@/components/BackButton'
 import { supabase } from '@/lib/supabase'
@@ -10,6 +10,7 @@ interface LeaderboardRow {
   user_name: string
   total_points: number
   rank: number
+  bonus_points?: number
   c20?: number
   c15?: number
   c10?: number
@@ -49,7 +50,7 @@ export default function RankingPage() {
 
     const { data: leaderboardData } = await supabase
       .from('leaderboard')
-      .select('user_id, user_name, total_points, rank, c20, c15, c10, c5, c0')
+      .select('user_id, user_name, total_points, rank, bonus_points, c20, c15, c10, c5, c0')
       .eq('pool_id', poolId!)
       .order('rank', { ascending: true })
       .order('user_name', { ascending: true })
@@ -164,27 +165,41 @@ export default function RankingPage() {
                     <span className="ml-1 text-xs sm:text-lg font-semibold align-middle">0</span>
                   </span>
                 </th>
+                <th className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]">
+                  <span className="inline-flex items-center gap-1 px-1 py-1 rounded border border-white border-opacity-25 bg-white bg-opacity-10">
+                    <span className="text-base sm:text-xl leading-none">⭐</span>
+                    <span className="ml-1 text-xs sm:text-lg font-semibold align-middle">Bônus</span>
+                  </span>
+                </th>
                 <th className="px-4 py-3 text-right align-middle">Pontos</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {filteredRows.map(r => {
                 const rowBg = r.rank === 1
-                  ? 'bg-gradient-to-r from-yellow-300 via-yellow-200 to-yellow-50 hover:brightness-95'
+                  ? 'bg-gradient-to-r from-amber-400 via-yellow-200 to-yellow-50 hover:brightness-95'
                   : r.rank === 2
                     ? 'bg-gradient-to-r from-slate-200 via-slate-100 to-white hover:brightness-95'
                     : r.rank === 3
-                      ? 'bg-gradient-to-r from-amber-200 via-amber-100 to-amber-50 hover:brightness-95'
+                      ? 'bg-gradient-to-r from-amber-100 via-amber-50 to-white hover:brightness-95'
                       : r.user_id === user?.id
                         ? 'bg-brand-50 font-semibold hover:bg-brand-100'
                         : 'hover:bg-brand-50';
                 const nameColor = r.rank === 1
-                  ? 'text-yellow-900 font-extrabold'
+                  ? 'font-extrabold text-gold-shine'
                   : r.rank === 2
-                    ? 'text-slate-700 font-extrabold'
+                    ? 'font-extrabold text-slate-600'
                     : r.rank === 3
-                      ? 'text-amber-950 font-extrabold'
+                      ? 'font-extrabold text-amber-700'
                       : '';
+                const nameStyle: React.CSSProperties = {};
+                const chevronColor = r.rank === 1
+                  ? 'text-amber-700'
+                  : r.rank === 2
+                    ? 'text-slate-500'
+                    : r.rank === 3
+                      ? 'text-amber-600'
+                      : 'text-slate-400';
                 return (
                 <tr
                   key={r.user_id}
@@ -197,18 +212,28 @@ export default function RankingPage() {
                       : <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-600 text-xs font-bold mx-auto">{r.rank}</span>
                     }
                   </td>
-                  <td className="px-4 py-3 align-middle">
-                    <span className={`text-xs sm:text-sm leading-snug ${nameColor}`}>{r.user_name}</span>
-                    {r.user_id === user?.id && <span title="Você" aria-label="Você (esta é a sua conta)" className="mx-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-brand-100 text-brand-700 border border-brand-200 shadow-sm">você</span>}
-                    <svg className="inline-block w-3 h-3 ml-1 align-middle text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M9 18l6-6-6-6" />
-                    </svg>
+                  <td className="px-4 py-3 align-middle max-w-0 w-full">
+                    <div className="flex items-center gap-1 min-w-0">
+                      <div className="min-w-0 flex-1" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
+                        <span className={`text-xs sm:text-sm leading-snug ${nameColor}`} style={nameStyle}>{r.user_name}</span>
+                        {r.user_id === user?.id && <span title="Você" aria-label="Você (esta é a sua conta)" className="mx-1.5 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-normal bg-brand-100 text-brand-700 border border-brand-200 shadow-sm">você</span>}
+                      </div>
+                      <svg className={`shrink-0 w-3 h-3 ${chevronColor}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M9 18l6-6-6-6" />
+                      </svg>
+                    </div>
                   </td>
                   <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(20)}>{r.c20 ?? 0}</span></td>
                   <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(15)}>{r.c15 ?? 0}</span></td>
                   <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(10)}>{r.c10 ?? 0}</span></td>
                   <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(5)}>{r.c5 ?? 0}</span></td>
                   <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]"><span className={'inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base ' + getPointsColor(0)}>{r.c0 ?? 0}</span></td>
+                  <td className="hidden sm:table-cell px-2 py-3 text-center align-middle min-w-[44px] sm:min-w-[96px]">
+                    {(r.bonus_points ?? 0) > 0
+                      ? <span className="inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base text-violet-700 bg-violet-50 border-violet-300">+{r.bonus_points}</span>
+                      : <span className="inline-flex items-center font-bold px-1 py-1 rounded border text-xs sm:text-base text-slate-400 bg-slate-50 border-slate-200">0</span>
+                    }
+                  </td>
                   <td className="px-4 py-3 text-right font-bold text-brand-700 align-middle">
                     <span className={'inline-flex items-center px-3 py-1 rounded-full font-bold text-lg sm:text-xl ' + (r.total_points >= 100 ? 'bg-accent-50 text-accent-700 border border-accent-200' : 'bg-white text-brand-700 border border-gray-100')}>{r.total_points}</span>
                   </td>
@@ -217,7 +242,7 @@ export default function RankingPage() {
               })}
               {filteredRows.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-6 text-center text-sm text-slate-500">
+                  <td colSpan={9} className="px-4 py-6 text-center text-sm text-slate-500">
                     Nenhum participante encontrado para "{nameFilter}".
                   </td>
                 </tr>

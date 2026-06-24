@@ -899,16 +899,24 @@ export default function BolaoPage() {
                       ? 'bg-gradient-to-r from-yellow-200 via-yellow-50 to-white border border-yellow-300 shadow-md'
                       : row.rank === 2
                         ? 'bg-gradient-to-r from-slate-200 via-slate-100 to-white border border-slate-300 shadow-sm'
-                        : 'bg-gradient-to-r from-amber-300 via-amber-200 to-amber-100 border border-amber-300'
+                        : 'bg-gradient-to-r from-amber-100 via-amber-50 to-white border border-amber-100'
                     : 'bg-gradient-to-r from-slate-50 to-white border border-gray-100';
 
                   const nameColorClass = row.rank === 1
-                    ? 'text-yellow-900'
+                    ? 'text-gold-shine'
                     : row.rank === 2
-                      ? 'text-slate-700'
+                      ? 'text-slate-600'
                       : row.rank === 3
-                        ? 'text-amber-950'
+                        ? 'text-amber-700'
                         : 'text-gray-700';
+
+                  const chevronColor = row.rank === 1
+                    ? 'text-amber-700'
+                    : row.rank === 2
+                      ? 'text-slate-500'
+                      : row.rank === 3
+                        ? 'text-amber-600'
+                        : 'text-slate-500';
 
                   const pointsSizeClass = row.rank === 1
                     ? 'text-base sm:text-lg'
@@ -930,19 +938,15 @@ export default function BolaoPage() {
                       onClick={() => navigate(`/bolao/${poolId}/participante/${row.user_id}`)}
                       className={`flex items-center justify-between rounded-xl px-2 py-2 cursor-pointer transition-colors hover:brightness-95 ${outerClass}`}
                     >
-                      <div className="flex items-center gap-2 min-w-0">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
                         {isTop
                           ? <span className="text-xl sm:text-2xl shrink-0 leading-none">{medal}</span>
                           : <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white border border-slate-200 text-slate-600 text-xs font-bold shrink-0">{row.rank}</span>
                         }
-                        <p
-                          className={
-                            isTop
-                              ? `text-xs sm:text-sm font-extrabold truncate ${nameColorClass}`
-                              : 'text-xs sm:text-sm text-gray-700 font-medium truncate'
-                          }
-                        >
-                          {row.user_name}
+                        <div className="min-w-0 flex-1" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
+                          <span className={isTop ? `text-xs sm:text-sm font-extrabold ${nameColorClass}` : 'text-xs sm:text-sm text-gray-700 font-medium'}>
+                            {row.user_name}
+                          </span>
                           {row.user_id === user?.id && (
                             <span
                               title="Você"
@@ -952,12 +956,12 @@ export default function BolaoPage() {
                               você
                             </span>
                           )}
-                          <svg className="inline-block w-3 h-3 ml-1 align-middle text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M9 18l6-6-6-6" />
-                          </svg>
-                        </p>
+                        </div>
+                        <svg className={`shrink-0 w-3 h-3 mx-1 ${isTop ? chevronColor : 'text-slate-300'}`} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M9 18l6-6-6-6" />
+                        </svg>
                       </div>
-                      <div className="shrink-0">
+                      <div className="shrink-0 w-14 flex justify-end sm:ml-3">
                         <span
                           className={
                             `inline-flex items-center rounded-full font-bold ${pointsSizeClass} ${pointsPadClass} ` +
@@ -981,10 +985,11 @@ export default function BolaoPage() {
                   onClick={() => navigate(`/bolao/${poolId}/participante/${myRanking.user_id}`)}
                   className="flex items-center justify-between rounded-xl px-2 py-2 bg-gradient-to-r from-brand-50 to-sky-50 border border-brand-100 cursor-pointer transition-colors hover:brightness-95"
                 >
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
                     <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-white border border-brand-200 text-brand-700 text-xs font-bold shrink-0">{myRanking.rank}</span>
-                    <p className="text-sm font-bold text-brand-700 truncate">
-                      {myRanking.user_name}{' '}
+                    <div className="min-w-0 flex-1" style={{ overflowWrap: 'break-word', wordBreak: 'break-word' }}>
+                      <span className="text-xs sm:text-sm font-bold text-brand-700">{myRanking.user_name}</span>
+                      {' '}
                       <span
                         title="Você"
                         aria-label="Você (esta é a sua conta)"
@@ -992,12 +997,12 @@ export default function BolaoPage() {
                       >
                         você
                       </span>
-                      <svg className="inline-block w-3 h-3 ml-1 align-middle text-slate-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M9 18l6-6-6-6" />
-                      </svg>
-                    </p>
+                    </div>
+                    <svg className="shrink-0 w-3 h-3 mx-1 text-brand-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M9 18l6-6-6-6" />
+                    </svg>
                   </div>
-                  <div>
+                  <div className="shrink-0 w-14 flex justify-end sm:ml-3">
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full font-bold text-xs bg-white text-brand-700 border border-gray-100">
                       {myRanking.total_points}
                     </span>
