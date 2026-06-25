@@ -9,6 +9,7 @@ interface Prediction {
   points: number | null
   rank_after?: number | null
   position_delta?: number | null
+  current_rank?: number | null
 }
 
 interface SnapshotPredictionsProps {
@@ -47,17 +48,23 @@ export default function SnapshotPredictions({
 
   const hasRankData = predictions.some((p) => p.rank_after != null)
 
-  // Ordena pela posição do ranking (após esse jogo) quando disponível, senão por pontos
   const sortedPredictions = isFinished
     ? [...predictions].sort((a, b) => {
-        if (hasRankData) {
+        // Primary: current rank from leaderboard (immune to stale snapshots)
+        const hasCurrent = a.current_rank != null || b.current_rank != null
+        if (hasCurrent) {
+          const aRank = a.current_rank ?? 9999
+          const bRank = b.current_rank ?? 9999
+          if (aRank !== bRank) return aRank - bRank
+        } else if (hasRankData) {
           const aRank = a.rank_after ?? 9999
           const bRank = b.rank_after ?? 9999
-          return aRank - bRank
+          if (aRank !== bRank) return aRank - bRank
+        } else {
+          const aPoints = a.points ?? 0
+          const bPoints = b.points ?? 0
+          if (bPoints !== aPoints) return bPoints - aPoints
         }
-        const aPoints = a.points ?? 0
-        const bPoints = b.points ?? 0
-        if (bPoints !== aPoints) return bPoints - aPoints
         return a.user_name.localeCompare(b.user_name, 'pt-BR')
       })
     : [...predictions].sort((a, b) => a.user_name.localeCompare(b.user_name, 'pt-BR'))

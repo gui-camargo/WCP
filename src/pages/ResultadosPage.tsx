@@ -33,6 +33,7 @@ interface UserPred {
   home_guess: number
   away_guess: number
   points: number | null
+  current_rank?: number | null
 }
 
 interface GroupStanding {
@@ -408,7 +409,7 @@ export default function ResultadosPage() {
         .eq('match_id', matchId),
       supabase
         .from('leaderboard')
-        .select('user_id, user_name')
+        .select('user_id, user_name, rank')
         .eq('pool_id', poolId!),
       supabase
         .from('pool_members')
@@ -425,6 +426,9 @@ export default function ResultadosPage() {
 
     const nameByUserId = new Map<string, string>(
       (leaderboardRes.data ?? []).map((row: any) => [row.user_id, row.user_name])
+    )
+    const rankByUserId = new Map<string, number>(
+      (leaderboardRes.data ?? []).map((row: any) => [row.user_id, row.rank])
     )
 
     if (allUserIds.length > 0) {
@@ -450,6 +454,7 @@ export default function ResultadosPage() {
         home_guess: pred?.home_guess ?? 0,
         away_guess: pred?.away_guess ?? 0,
         points: pred?.points ?? null,
+        current_rank: rankByUserId.get(userId) ?? null,
       }
     })
     setUserPreds(list)

@@ -96,6 +96,7 @@ interface Prediction {
   home_guess: number;
   away_guess: number;
   points: number | null;
+  current_rank?: number | null;
 }
 
 function toDateTimeLocalValue(dbValue: string | null | undefined) {
@@ -120,6 +121,7 @@ export default function AdminPage() {
   );
   const [loadingMatches, setLoadingMatches] = useState(false);
   const [savingMatch, setSavingMatch] = useState<Record<string, boolean>>({});
+  const [retakingSnapshot, setRetakingSnapshot] = useState<Record<string, boolean>>({});
   const [matchMessage, setMatchMessage] = useState<Record<string, string>>({});
   const [groupFilter, setGroupFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState<
@@ -1351,6 +1353,23 @@ export default function AdminPage() {
     setSavingMatch((prev) => ({ ...prev, [matchId]: false }));
   }
 
+  async function retakeSnapshot(matchId: string) {
+    setRetakingSnapshot((prev) => ({ ...prev, [matchId]: true }));
+    setMatchMessage((prev) => ({ ...prev, [matchId]: '' }));
+
+    const { error } = await (supabase as any).rpc('take_leaderboard_snapshot', {
+      p_match_id: matchId,
+    });
+
+    setMatchMessage((prev) => ({
+      ...prev,
+      [matchId]: error
+        ? 'Erro ao refazer snapshot. Tente novamente.'
+        : 'Snapshot atualizado com os rankings atuais.',
+    }));
+    setRetakingSnapshot((prev) => ({ ...prev, [matchId]: false }));
+  }
+
   async function loadPredictions(matchId: string) {
     if (predictionsByMatch[matchId]) {
       setOpenSnapshotMatch(matchId);
@@ -1359,12 +1378,16 @@ export default function AdminPage() {
 
     setLoadingPredictions((prev) => ({ ...prev, [matchId]: true }));
 
-    const { data: predictionsData, error: predictionsError } = await (
-      supabase.from('predictions') as any
-    )
-      .select(`user_id, home_guess, away_guess, points`)
-      .eq('match_id', matchId)
-      .eq('pool_id', poolId);
+    const [{ data: predictionsData, error: predictionsError }, { data: leaderboardData }] = await Promise.all([
+      (supabase.from('predictions') as any)
+        .select(`user_id, home_guess, away_guess, points`)
+        .eq('match_id', matchId)
+        .eq('pool_id', poolId),
+      supabase
+        .from('leaderboard')
+        .select('user_id, rank')
+        .eq('pool_id', poolId!),
+    ]);
 
     if (predictionsError) {
       console.error('[Admin] loadPredictions:error', {
@@ -1397,6 +1420,9 @@ export default function AdminPage() {
     const predByUser = new Map<string, any>(
       (predictionsData ?? []).map((p: any) => [p.user_id, p]),
     );
+    const rankByUserId = new Map<string, number>(
+      (leaderboardData ?? []).map((row: any) => [row.user_id, row.rank]),
+    );
 
     const predictions: Prediction[] = allMemberIds.map((userId) => {
       const pred = predByUser.get(userId);
@@ -1407,6 +1433,7 @@ export default function AdminPage() {
         home_guess: pred?.home_guess ?? 0,
         away_guess: pred?.away_guess ?? 0,
         points: pred?.points ?? null,
+        current_rank: rankByUserId.get(userId) ?? null,
       };
     });
 
@@ -2485,6 +2512,19 @@ export default function AdminPage() {
                             </button>
                           )}
 
+                          {m.status === 'encerrado' && (
+                            <button
+                              onClick={() => retakeSnapshot(m.id)}
+                              disabled={Boolean(retakingSnapshot[m.id])}
+                              className="bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg disabled:opacity-50 transition"
+                              title="Refaz o snapshot com os rankings atuais (use após corrigir placar)"
+                            >
+                              {retakingSnapshot[m.id]
+                                ? 'Atualizando...'
+                                : 'Refazer Snapshot'}
+                            </button>
+                          )}
+
                           <button
                             onClick={() => loadPredictions(m.id)}
                             disabled={Boolean(loadingPredictions[m.id])}
@@ -2620,6 +2660,7 @@ export default function AdminPage() {
                   ...p,
                   rank_after: snapshotRankingDeltas.size > 0 ? (snapshotRankingDeltas.get(p.user_id)?.rank_after ?? null) : undefined,
                   position_delta: snapshotRankingDeltas.size > 0 ? (snapshotRankingDeltas.get(p.user_id)?.position_delta ?? null) : undefined,
+                  current_rank: p.current_rank ?? null,
                 }));
 
                 if (!match)

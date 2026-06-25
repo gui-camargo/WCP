@@ -64,6 +64,7 @@ interface UserPred {
   away_guess: number;
   points: number | null;
   predicted?: boolean;
+  current_rank?: number | null;
 }
 
 interface PrizeOverview {
@@ -419,7 +420,7 @@ export default function BolaoPage() {
         .eq('match_id', matchId),
       supabase
         .from('leaderboard')
-        .select('user_id, user_name')
+        .select('user_id, user_name, rank')
         .eq('pool_id', poolId),
       supabase
         .from('pool_members')
@@ -438,6 +439,9 @@ export default function BolaoPage() {
         row.user_id,
         row.user_name,
       ]),
+    );
+    const rankByUserId = new Map<string, number>(
+      (leaderboardRes.data ?? []).map((row: any) => [row.user_id, row.rank]),
     );
 
     const predictedUserIds = Array.from(
@@ -478,6 +482,7 @@ export default function BolaoPage() {
         away_guess: pred?.away_guess ?? 0,
         points: pred?.points ?? null,
         predicted: pred !== undefined,
+        current_rank: rankByUserId.get(userId) ?? null,
       };
     });
 

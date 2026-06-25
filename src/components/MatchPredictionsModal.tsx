@@ -27,6 +27,7 @@ interface UserPredRef {
   away_guess: number
   points: number | null
   predicted?: boolean
+  current_rank?: number | null
 }
 
 interface MatchPredictionsModalProps {
@@ -48,7 +49,9 @@ export default function MatchPredictionsModal({
 }: MatchPredictionsModalProps) {
   const [liveMatch, setLiveMatch] = useState<Pick<MatchRef, 'status' | 'home_score' | 'away_score'> | null>(null)
   const [rankingDeltas, setRankingDeltas] = useState<Map<string, { rank_after: number; position_delta: number | null }>>(new Map())
+  const [loadingDeltas, setLoadingDeltas] = useState(false)
 
+  // Realtime subscription — reset on open/match change
   useEffect(() => {
     if (!open || !match) return
     setLiveMatch(null)
@@ -66,21 +69,28 @@ export default function MatchPredictionsModal({
       )
       .subscribe()
 
-    if (match.status === 'encerrado') {
-      ;(supabase as any).rpc('get_match_ranking_delta', { p_match_id: match.id }).then(({ data }: any) => {
-        const map = new Map<string, { rank_after: number; position_delta: number | null }>()
-        for (const row of data ?? []) map.set(row.user_id, { rank_after: row.rank_after, position_delta: row.position_delta })
-        setRankingDeltas(map)
-      })
-    }
-
     return () => { supabase.removeChannel(channel) }
   }, [open, match?.id])
+
+  // Fetch ranking deltas whenever the effective status becomes 'encerrado'
+  // (covers both: modal opened on ended game, and game ending while modal is open)
+  const effectiveStatus = liveMatch?.status ?? match?.status
+  useEffect(() => {
+    if (!open || !match || effectiveStatus !== 'encerrado') return
+    setLoadingDeltas(true)
+    ;(supabase as any).rpc('get_match_ranking_delta', { p_match_id: match.id }).then(({ data }: any) => {
+      const map = new Map<string, { rank_after: number; position_delta: number | null }>()
+      for (const row of data ?? []) map.set(row.user_id, { rank_after: row.rank_after, position_delta: row.position_delta })
+      setRankingDeltas(map)
+      setLoadingDeltas(false)
+    })
+  }, [open, match?.id, effectiveStatus])
 
   if (!open || !match) return null
 
   const DeltaBadge = ({ delta }: { delta: number | null | undefined }) => {
     const base = "inline-flex items-center justify-center w-5 shrink-0 text-[11px] font-bold"
+    if (loadingDeltas) return <span className={`${base} text-slate-300`}>·</span>
     if (delta == null) return <span className={base} />
     if (delta === 0)   return <span className={`${base} text-slate-400 font-semibold`}>—</span>
     if (delta > 0)     return <span className={`${base} text-emerald-600`}>▲{delta}</span>
@@ -88,6 +98,7 @@ export default function MatchPredictionsModal({
   }
 
   const RankBadge = ({ rank }: { rank: number | null | undefined }) => {
+    if (loadingDeltas) return <span className="inline-flex w-5 h-5 shrink-0 rounded border border-slate-200 bg-slate-100 animate-pulse" />
     if (rank == null) return <span className="inline-flex w-5 h-5 shrink-0" />
     const cls =
       rank === 1 ? 'border-yellow-400 bg-yellow-100 text-yellow-800' :
@@ -130,11 +141,11 @@ export default function MatchPredictionsModal({
   }
 
   const sortedPreds = [...userPreds].sort((a, b) => {
-    if (rankingDeltas.size > 0) {
-      const aRank = rankingDeltas.get(a.user_id)?.rank_after ?? 9999
-      const bRank = rankingDeltas.get(b.user_id)?.rank_after ?? 9999
-      return aRank - bRank
-    }
+    // Primary: current rank from leaderboard (always fresh, immune to stale snapshots)
+    const aCurrent = a.current_rank ?? 9999
+    const bCurrent = b.current_rank ?? 9999
+    if (aCurrent !== bCurrent) return aCurrent - bCurrent
+    // Fallback: alphabetical
     return a.user_name.localeCompare(b.user_name, 'pt-BR')
   })
 
@@ -445,8 +456,8 @@ export default function MatchPredictionsModal({
 
                   return (
                     <div key={i} className={`rounded-xl border-2 bg-white pl-1.5 pr-3 py-2 flex items-center gap-1.5 ${getPointsBorder(p.points)}`}>
-                      {rankingDeltas.size > 0 && <DeltaBadge delta={rankingDeltas.get(p.user_id)?.position_delta} />}
-                      {rankingDeltas.size > 0 && <RankBadge rank={rankingDeltas.get(p.user_id)?.rank_after} />}
+                      {isGameEnded && <DeltaBadge delta={rankingDeltas.get(p.user_id)?.position_delta} />}
+                      {isGameEnded && <RankBadge rank={rankingDeltas.get(p.user_id)?.rank_after} />}
                       <span className={`text-[11px] text-gray-800 truncate flex-1 min-w-0 ${p.user_id === currentUserId ? 'font-bold' : 'font-medium'}`}>
                         {p.user_name}
                       </span>
@@ -495,8 +506,8 @@ export default function MatchPredictionsModal({
                       const predictedDraw = p.home_guess === p.away_guess
 
                       const winnerCorrect = (predictedHomeWins && realHomeWins) || (predictedAwayWins && realAwayWins) || (predictedDraw && realDraw)
-                      const homeGoalCorrect = p.home_guess === match.home_score
-                      const awayGoalCorrect = p.away_guess === match.away_score
+                      const homeGoalCorrect = p.home_guess === currentHomeScore
+                      const awayGoalCorrect = p.away_guess === currentAwayScore
 
                       return (
                         <tr key={i} className="hover:bg-gray-50">

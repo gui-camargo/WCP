@@ -474,8 +474,10 @@ export default function ParticipanteStatsPage() {
   );
 
   const mergedHistory = useMemo(() => {
+    let runningPoints = 0;
     return closedMatches.map((match, index) => {
       const prediction = predMap.get(match.id) ?? null;
+      runningPoints += prediction?.points ?? 0;
       const snapshot = snapshotMap.get(match.id) ?? null;
       const prevSnapshot =
         index > 0
@@ -483,35 +485,26 @@ export default function ParticipanteStatsPage() {
           : null;
       const delta =
         snapshot && prevSnapshot ? prevSnapshot.rank - snapshot.rank : null;
-      return { match, prediction, snapshot, delta };
+      return { match, prediction, snapshot, delta, runningPoints };
     });
   }, [closedMatches, predMap, snapshotMap]);
 
   const chartData: ChartPoint[] = useMemo(() => {
-    const sorted = [...snapshots].sort((a, b) => {
-      const matchA = closedMatches.find((m) => m.id === a.match_id);
-      const matchB = closedMatches.find((m) => m.id === b.match_id);
-      return new Date(matchA?.kickoff_at ?? 0).getTime() - new Date(matchB?.kickoff_at ?? 0).getTime();
-    });
-    return sorted.map((snap, index) => {
-      const match = closedMatches.find((m) => m.id === snap.match_id);
-      const homeAbbr = (match?.home_team?.name ?? '?')
-        .substring(0, 3)
-        .toUpperCase();
-      const awayAbbr = (match?.away_team?.name ?? '?')
-        .substring(0, 3)
-        .toUpperCase();
-      return {
-        index: index + 1,
-        rank: snap.rank,
-        totalPoints: snap.total_points,
-        label: match
-          ? `${match.home_team?.name ?? '?'} × ${match.away_team?.name ?? '?'}`
-          : `Jogo ${index + 1}`,
-        xLabel: `${homeAbbr}×${awayAbbr}`,
-      };
-    });
-  }, [snapshots, closedMatches]);
+    return mergedHistory
+      .filter((item) => item.snapshot !== null)
+      .map((item, index) => {
+        const { match, snapshot, runningPoints } = item;
+        const homeAbbr = (match.home_team?.name ?? '?').substring(0, 3).toUpperCase();
+        const awayAbbr = (match.away_team?.name ?? '?').substring(0, 3).toUpperCase();
+        return {
+          index: index + 1,
+          rank: snapshot!.rank,
+          totalPoints: runningPoints,
+          label: `${match.home_team?.name ?? '?'} × ${match.away_team?.name ?? '?'}`,
+          xLabel: `${homeAbbr}×${awayAbbr}`,
+        };
+      });
+  }, [mergedHistory]);
 
   const computed = useMemo(() => {
     const orderedPts = mergedHistory
@@ -1036,7 +1029,7 @@ export default function ParticipanteStatsPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {mergedHistory.map(
-                        ({ match, prediction, snapshot, delta }, idx) => (
+                        ({ match, prediction, snapshot, delta, runningPoints }, idx) => (
                           <tr
                             key={match.id}
                             className={
@@ -1096,7 +1089,7 @@ export default function ParticipanteStatsPage() {
                               <DeltaBadge delta={delta} />
                             </td>
                             <td className="px-3 py-3 text-right font-bold text-brand-700 tabular-nums">
-                              {snapshot?.total_points ?? '–'}
+                              {runningPoints}
                             </td>
                           </tr>
                         ),
