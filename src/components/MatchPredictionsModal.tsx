@@ -141,10 +141,11 @@ export default function MatchPredictionsModal({
   }
 
   const sortedPreds = [...userPreds].sort((a, b) => {
-    // Primary: current rank from leaderboard (always fresh, immune to stale snapshots)
-    const aCurrent = a.current_rank ?? 9999
-    const bCurrent = b.current_rank ?? 9999
-    if (aCurrent !== bCurrent) return aCurrent - bCurrent
+    // Primary: rank_after (posição logo após este jogo) — bate com o badge mostrado.
+    // Fallback: current_rank (ranking ao vivo) quando ainda não há deltas / jogo não encerrado.
+    const aRank = rankingDeltas.get(a.user_id)?.rank_after ?? a.current_rank ?? 9999
+    const bRank = rankingDeltas.get(b.user_id)?.rank_after ?? b.current_rank ?? 9999
+    if (aRank !== bRank) return aRank - bRank
     // Fallback: alphabetical
     return a.user_name.localeCompare(b.user_name, 'pt-BR')
   })

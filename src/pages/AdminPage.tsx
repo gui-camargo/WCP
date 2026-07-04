@@ -11,6 +11,7 @@ import { exportSnapshotAsImage, exportElementAsImage } from '@/lib/export-snapsh
 
 const PHASE_LABELS: Record<string, string> = {
   grupos: 'Fase de Grupos',
+  dezesseis_avos: 'Dezesseistavas de Final',
   oitavas: 'Oitavas de Final',
   quartas: 'Quartas de Final',
   semi: 'Semifinal',
@@ -200,6 +201,9 @@ export default function AdminPage() {
   const [downloadingReport, setDownloadingReport] = useState(false);
   const [downloadingGroupReport, setDownloadingGroupReport] = useState(false);
   const [downloadingPodiumReport, setDownloadingPodiumReport] = useState(false);
+  const [allTeamsList, setAllTeamsList] = useState<TeamOption[]>([]);
+  const [newMatch, setNewMatch] = useState({ home_team_id: '', away_team_id: '', kickoff_at: '', venue: '' });
+  const [addingMatch, setAddingMatch] = useState(false);
 
   const paidMembersCount = paymentRows.filter(
     (p) => p.status === 'confirmado',
@@ -329,6 +333,13 @@ export default function AdminPage() {
       .order('created_at');
     const nextRounds = (roundData ?? []) as Round[];
     setRounds(nextRounds);
+
+    const { data: teamsData } = await supabase
+      .from('teams')
+      .select('id, name, flag_code')
+      .neq('name', 'A Definir')
+      .order('name');
+    setAllTeamsList((teamsData ?? []) as TeamOption[]);
 
     if (nextRounds.length === 0) {
       setSelectedRoundId('');
@@ -1197,6 +1208,21 @@ export default function AdminPage() {
     setNewRound({ name: '', phase: 'grupos' });
     setAddingRound(false);
     loadData();
+  }
+
+  async function addMatch() {
+    if (!selectedRoundId || !newMatch.home_team_id || !newMatch.away_team_id || !newMatch.kickoff_at) return;
+    setAddingMatch(true);
+    await supabase.from('matches').insert({
+      round_id: selectedRoundId,
+      home_team_id: newMatch.home_team_id,
+      away_team_id: newMatch.away_team_id,
+      kickoff_at: new Date(newMatch.kickoff_at).toISOString(),
+      venue: newMatch.venue,
+    } as any);
+    setNewMatch({ home_team_id: '', away_team_id: '', kickoff_at: '', venue: '' });
+    setAddingMatch(false);
+    loadMatches(selectedRoundId);
   }
 
   function updateDraft(matchId: string, side: 'home' | 'away', value: string) {
@@ -2369,6 +2395,66 @@ export default function AdminPage() {
               </div>
             </div>
           </div>
+
+          {selectedRoundId && rounds.find((r) => r.id === selectedRoundId)?.phase !== 'grupos' && (
+            <div className="modern-card p-4 mb-4">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">Adicionar Jogo</h3>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Time da Casa</label>
+                  <select
+                    value={newMatch.home_team_id}
+                    onChange={(e) => setNewMatch((m) => ({ ...m, home_team_id: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">Selecione...</option>
+                    {allTeamsList.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Time Visitante</label>
+                  <select
+                    value={newMatch.away_team_id}
+                    onChange={(e) => setNewMatch((m) => ({ ...m, away_team_id: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="">Selecione...</option>
+                    {allTeamsList.map((t) => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Data e Hora</label>
+                  <input
+                    type="datetime-local"
+                    value={newMatch.kickoff_at}
+                    onChange={(e) => setNewMatch((m) => ({ ...m, kickoff_at: e.target.value }))}
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Local</label>
+                  <input
+                    type="text"
+                    value={newMatch.venue}
+                    onChange={(e) => setNewMatch((m) => ({ ...m, venue: e.target.value }))}
+                    placeholder="Ex: Los Angeles"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+              </div>
+              <button
+                onClick={addMatch}
+                disabled={addingMatch || !newMatch.home_team_id || !newMatch.away_team_id || !newMatch.kickoff_at}
+                className="mt-3 bg-brand-600 text-white px-4 py-2 rounded-lg text-sm disabled:opacity-50"
+              >
+                {addingMatch ? '...' : 'Adicionar Jogo'}
+              </button>
+            </div>
+          )}
 
           {loadingMatches ? (
             <p className="text-gray-400 text-center py-8">

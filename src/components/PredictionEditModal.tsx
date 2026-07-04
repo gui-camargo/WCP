@@ -44,19 +44,31 @@ interface RecentMatch {
 }
 
 function getResult(m: RecentMatch, trackedTeamId: string): 'W' | 'D' | 'L' {
-  const isHome = m.home_team_id === trackedTeamId
-  const scored = isHome ? m.home_score : m.away_score
-  const conceded = isHome ? m.away_score : m.home_score
-  if (scored > conceded) return 'W'
-  if (scored === conceded) return 'D'
-  return 'L'
+  const isHome = m.home_team_id === trackedTeamId;
+  const scored = isHome ? m.home_score : m.away_score;
+  const conceded = isHome ? m.away_score : m.home_score;
+  if (scored > conceded) return 'W';
+  if (scored === conceded) return 'D';
+  return 'L';
 }
 
 const RESULT_TAG = {
-  W: { label: '✓', className: 'bg-emerald-100 text-emerald-700 border-emerald-200', rowClassName: 'bg-emerald-50 border-emerald-200' },
-  D: { label: '—', className: 'bg-amber-100 text-amber-700 border-amber-200', rowClassName: 'bg-amber-50 border-amber-200' },
-  L: { label: '✗', className: 'bg-red-100 text-red-700 border-red-200', rowClassName: 'bg-red-50 border-red-200' },
-}
+  W: {
+    label: '✓',
+    className: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    rowClassName: 'bg-emerald-50 border-emerald-200',
+  },
+  D: {
+    label: '—',
+    className: 'bg-amber-100 text-amber-700 border-amber-200',
+    rowClassName: 'bg-amber-50 border-amber-200',
+  },
+  L: {
+    label: '✗',
+    className: 'bg-red-100 text-red-700 border-red-200',
+    rowClassName: 'bg-red-50 border-red-200',
+  },
+};
 
 interface PredictionEditModalProps {
   open: boolean;
@@ -92,11 +104,21 @@ export default function PredictionEditModal({
   const [awayTeamMatches, setAwayTeamMatches] = useState<RecentMatch[]>([]);
   const [groupStandings, setGroupStandings] = useState<GroupStandingTeam[]>([]);
   const wasSavingRef = useRef(false);
+  const [homeTeamGroupInfo, setHomeTeamGroupInfo] = useState<{
+    groupCode: string | null;
+    position: number;
+  } | null>(null);
+  const [awayTeamGroupInfo, setAwayTeamGroupInfo] = useState<{
+    groupCode: string | null;
+    position: number;
+  } | null>(null);
 
   useEffect(() => {
     if (open) {
       setHomeGuess(myPrediction?.home_guess?.toString() ?? '');
       setAwayGuess(myPrediction?.away_guess?.toString() ?? '');
+      setHomeTeamGroupInfo(null);
+      setAwayTeamGroupInfo(null);
     }
   }, [open, myPrediction, match?.id]);
 
@@ -129,31 +151,34 @@ export default function PredictionEditModal({
       const groupQuery = match.group_id
         ? supabase
             .from('matches')
-            .select(`id, home_score, away_score, status, home_team:teams!matches_home_team_id_fkey(name, flag_code), away_team:teams!matches_away_team_id_fkey(name, flag_code)`)
+            .select(
+              `id, home_score, away_score, status, home_team:teams!matches_home_team_id_fkey(name, flag_code), away_team:teams!matches_away_team_id_fkey(name, flag_code)`,
+            )
             .eq('group_id', match.group_id)
         : Promise.resolve({ data: null });
 
-      const [{ data: homeData }, { data: awayData }, { data: groupData }] = await Promise.all([
-        supabase
-          .from('matches')
-          .select(matchSelect)
-          .or(
-            `home_team_id.eq.${match.home_team_id},away_team_id.eq.${match.home_team_id}`,
-          )
-          .eq('status', 'encerrado')
-          .order('kickoff_at', { ascending: false })
-          .limit(3),
-        supabase
-          .from('matches')
-          .select(matchSelect)
-          .or(
-            `home_team_id.eq.${match.away_team_id},away_team_id.eq.${match.away_team_id}`,
-          )
-          .eq('status', 'encerrado')
-          .order('kickoff_at', { ascending: false })
-          .limit(3),
-        groupQuery,
-      ]);
+      const [{ data: homeData }, { data: awayData }, { data: groupData }] =
+        await Promise.all([
+          supabase
+            .from('matches')
+            .select(matchSelect)
+            .or(
+              `home_team_id.eq.${match.home_team_id},away_team_id.eq.${match.home_team_id}`,
+            )
+            .eq('status', 'encerrado')
+            .order('kickoff_at', { ascending: false })
+            .limit(3),
+          supabase
+            .from('matches')
+            .select(matchSelect)
+            .or(
+              `home_team_id.eq.${match.away_team_id},away_team_id.eq.${match.away_team_id}`,
+            )
+            .eq('status', 'encerrado')
+            .order('kickoff_at', { ascending: false })
+            .limit(3),
+          groupQuery,
+        ]);
 
       setHomeTeamMatches((homeData ?? []) as RecentMatch[]);
       setAwayTeamMatches((awayData ?? []) as RecentMatch[]);
@@ -161,33 +186,147 @@ export default function PredictionEditModal({
       if (groupData) {
         const teamMap = new Map<string, GroupStandingTeam>();
         for (const m of groupData as any[]) {
-          const homeName: string = m.home_team?.name ?? ''
-          const awayName: string = m.away_team?.name ?? ''
+          const homeName: string = m.home_team?.name ?? '';
+          const awayName: string = m.away_team?.name ?? '';
           if (!teamMap.has(homeName)) {
-            teamMap.set(homeName, { team_name: homeName, flag_code: m.home_team?.flag_code ?? null, matches: 0, wins: 0, draws: 0, losses: 0, goals_for: 0, goals_against: 0, points: 0 })
+            teamMap.set(homeName, {
+              team_name: homeName,
+              flag_code: m.home_team?.flag_code ?? null,
+              matches: 0,
+              wins: 0,
+              draws: 0,
+              losses: 0,
+              goals_for: 0,
+              goals_against: 0,
+              points: 0,
+            });
           }
           if (!teamMap.has(awayName)) {
-            teamMap.set(awayName, { team_name: awayName, flag_code: m.away_team?.flag_code ?? null, matches: 0, wins: 0, draws: 0, losses: 0, goals_for: 0, goals_against: 0, points: 0 })
+            teamMap.set(awayName, {
+              team_name: awayName,
+              flag_code: m.away_team?.flag_code ?? null,
+              matches: 0,
+              wins: 0,
+              draws: 0,
+              losses: 0,
+              goals_for: 0,
+              goals_against: 0,
+              points: 0,
+            });
           }
-          if (m.status === 'encerrado' && m.home_score !== null && m.away_score !== null) {
-            const home = teamMap.get(homeName)!
-            const away = teamMap.get(awayName)!
-            home.matches++; away.matches++
-            home.goals_for += m.home_score; home.goals_against += m.away_score
-            away.goals_for += m.away_score; away.goals_against += m.home_score
-            if (m.home_score > m.away_score) { home.wins++; home.points += 3; away.losses++ }
-            else if (m.home_score === m.away_score) { home.draws++; home.points++; away.draws++; away.points++ }
-            else { home.losses++; away.wins++; away.points += 3 }
+          if (
+            m.status === 'encerrado' &&
+            m.home_score !== null &&
+            m.away_score !== null
+          ) {
+            const home = teamMap.get(homeName)!;
+            const away = teamMap.get(awayName)!;
+            home.matches++;
+            away.matches++;
+            home.goals_for += m.home_score;
+            home.goals_against += m.away_score;
+            away.goals_for += m.away_score;
+            away.goals_against += m.home_score;
+            if (m.home_score > m.away_score) {
+              home.wins++;
+              home.points += 3;
+              away.losses++;
+            } else if (m.home_score === m.away_score) {
+              home.draws++;
+              home.points++;
+              away.draws++;
+              away.points++;
+            } else {
+              home.losses++;
+              away.wins++;
+              away.points += 3;
+            }
           }
         }
         const standings = Array.from(teamMap.values()).sort((a, b) => {
-          if (b.points !== a.points) return b.points - a.points
-          const sgA = a.goals_for - a.goals_against
-          const sgB = b.goals_for - b.goals_against
-          if (sgB !== sgA) return sgB - sgA
-          return b.goals_for - a.goals_for
-        })
-        setGroupStandings(standings)
+          if (b.points !== a.points) return b.points - a.points;
+          const sgA = a.goals_for - a.goals_against;
+          const sgB = b.goals_for - b.goals_against;
+          if (sgB !== sgA) return sgB - sgA;
+          return b.goals_for - a.goals_for;
+        });
+        setGroupStandings(standings);
+      }
+
+      if (!match.group_id) {
+        const fetchTeamGroupPosition = async (teamId: string | null) => {
+          if (!teamId) return null;
+
+          const { data: sampleMatches } = await supabase
+            .from('matches')
+            .select('group_id, group:groups(code)')
+            .or(`home_team_id.eq.${teamId},away_team_id.eq.${teamId}`)
+            .limit(20);
+
+          const sampleMatch = (sampleMatches as any[])?.find(
+            (m: any) => m.group_id != null,
+          );
+          if (!sampleMatch?.group_id) return null;
+
+          const { data: groupMatches } = await supabase
+            .from('matches')
+            .select(
+              'home_team_id, away_team_id, home_score, away_score, status',
+            )
+            .eq('group_id', (sampleMatch as any).group_id);
+
+          if (!groupMatches?.length) return null;
+
+          const teamStats = new Map<
+            string,
+            { points: number; gd: number; gf: number }
+          >();
+          for (const gm of groupMatches as any[]) {
+            if (!teamStats.has(gm.home_team_id))
+              teamStats.set(gm.home_team_id, { points: 0, gd: 0, gf: 0 });
+            if (!teamStats.has(gm.away_team_id))
+              teamStats.set(gm.away_team_id, { points: 0, gd: 0, gf: 0 });
+            if (
+              gm.status === 'encerrado' &&
+              gm.home_score !== null &&
+              gm.away_score !== null
+            ) {
+              const home = teamStats.get(gm.home_team_id)!;
+              const away = teamStats.get(gm.away_team_id)!;
+              home.gf += gm.home_score;
+              away.gf += gm.away_score;
+              home.gd += gm.home_score - gm.away_score;
+              away.gd += gm.away_score - gm.home_score;
+              if (gm.home_score > gm.away_score) home.points += 3;
+              else if (gm.home_score === gm.away_score) {
+                home.points++;
+                away.points++;
+              } else away.points += 3;
+            }
+          }
+
+          const sorted = Array.from(teamStats.entries()).sort(
+            ([, a], [, b]) => {
+              if (b.points !== a.points) return b.points - a.points;
+              if (b.gd !== a.gd) return b.gd - a.gd;
+              return b.gf - a.gf;
+            },
+          );
+
+          const position = sorted.findIndex(([id]) => id === teamId) + 1;
+          if (position === 0) return null;
+          return {
+            groupCode: (sampleMatch as any).group?.code as string | null,
+            position,
+          };
+        };
+
+        const [homeInfo, awayInfo] = await Promise.all([
+          fetchTeamGroupPosition(match.home_team_id),
+          fetchTeamGroupPosition(match.away_team_id),
+        ]);
+        setHomeTeamGroupInfo(homeInfo);
+        setAwayTeamGroupInfo(awayInfo);
       }
     };
 
@@ -213,7 +352,9 @@ export default function PredictionEditModal({
         <div className="flex items-center justify-between px-4 sm:px-5 py-2.5 border-b border-slate-100 shrink-0 bg-gradient-to-r from-slate-50 to-white">
           <div className="flex items-center gap-2">
             <span className="inline-block w-1 h-4 rounded-full bg-brand-500 shrink-0" />
-            <h2 className="text-sm font-extrabold tracking-tight text-slate-800">Dar Palpite</h2>
+            <h2 className="text-sm font-extrabold tracking-tight text-slate-800">
+              Dar Palpite
+            </h2>
           </div>
           <button
             onClick={onClose}
@@ -242,7 +383,7 @@ export default function PredictionEditModal({
 
               <div className="mb-2 flex items-center justify-center gap-2">
                 <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold px-2 py-0.5">
-                  {match.group_code ? `Grupo ${match.group_code}` : 'Sem grupo'}
+                  {match.group_code ? `Grupo ${match.group_code}` : 'Mata-Mata'}
                 </span>
                 <span className="inline-flex items-center rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 border border-indigo-200">
                   {new Date(match.kickoff_at).toLocaleTimeString('pt-BR', {
@@ -338,13 +479,12 @@ export default function PredictionEditModal({
               )}
             </div>
 
-            {match.home_win_pct !== null &&
-              match.draw_pct !== null &&
-              match.away_win_pct !== null && (
-                <div className="modern-card no-theme-tint p-4 sm:p-5 border border-slate-200 bg-white">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide text-center mb-3">
-                    Probabilidade de Vitória
-                  </p>
+            <div className="modern-card no-theme-tint p-4 sm:p-5 border border-slate-200 bg-white">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide text-center mb-3">
+                Probabilidade de Vitória
+              </p>
+              {match.home_win_pct !== null && match.draw_pct !== null && match.away_win_pct !== null ? (
+                <>
                   <div className="flex justify-between text-center mb-2">
                     <div>
                       <p className="text-[10px] text-gray-400 leading-none mb-0.5">
@@ -385,8 +525,13 @@ export default function PredictionEditModal({
                       style={{ width: `${match.away_win_pct}%` }}
                     />
                   </div>
-                </div>
+                </>
+              ) : (
+                <p className="text-[11px] text-center text-gray-400">
+                  As odds serão atualizadas ~48h antes do jogo
+                </p>
               )}
+            </div>
 
             {(homeTeamMatches.length > 0 || awayTeamMatches.length > 0) && (
               <div className="modern-card no-theme-tint p-4 sm:p-5 border border-slate-200 bg-white">
@@ -395,11 +540,21 @@ export default function PredictionEditModal({
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {[
-                    { teamId: match.home_team_id, team: match.home_team, matches: homeTeamMatches },
-                    { teamId: match.away_team_id, team: match.away_team, matches: awayTeamMatches },
-                  ].map(({ teamId, team, matches }) => (
+                    {
+                      teamId: match.home_team_id,
+                      team: match.home_team,
+                      matches: homeTeamMatches,
+                      groupInfo: homeTeamGroupInfo,
+                    },
+                    {
+                      teamId: match.away_team_id,
+                      team: match.away_team,
+                      matches: awayTeamMatches,
+                      groupInfo: awayTeamGroupInfo,
+                    },
+                  ].map(({ teamId, team, matches, groupInfo }) => (
                     <div key={teamId} className="space-y-2">
-                      <div className="flex items-center justify-center gap-1">
+                      <div className="flex flex-wrap items-center justify-center gap-1">
                         <TeamWithFlag
                           name={team?.name}
                           flagCode={team?.flag_code}
@@ -407,11 +562,16 @@ export default function PredictionEditModal({
                           compact
                           className="text-xs font-semibold text-gray-500"
                         />
+                        {groupInfo && groupInfo.position > 0 && (
+                          <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-500 text-[9px] font-semibold px-1.5 py-0.5 border border-slate-200 whitespace-nowrap">
+                            {groupInfo.position}º - Grupo {groupInfo.groupCode}
+                          </span>
+                        )}
                       </div>
                       {matches.length > 0 ? (
                         matches.map((m) => {
-                          const result = getResult(m, teamId!)
-                          const tag = RESULT_TAG[result]
+                          const result = getResult(m, teamId!);
+                          const tag = RESULT_TAG[result];
                           const flagImg = (code: string | null | undefined) =>
                             code ? (
                               <img
@@ -420,31 +580,47 @@ export default function PredictionEditModal({
                               />
                             ) : (
                               <span className="h-3.5 w-5 shrink-0 rounded bg-gray-100 border border-gray-200" />
-                            )
+                            );
                           return (
                             <div
                               key={m.id}
                               className={`flex items-center gap-1 min-h-8 px-2 py-1 rounded-full border ${tag.rowClassName}`}
                             >
                               <div className="min-w-0 flex-1 flex items-center justify-end gap-1 flex-wrap">
-                                <span className={`text-[10px] leading-tight text-right ${m.home_team_id === teamId ? 'font-semibold' : 'font-medium'}`}>{m.home_team?.name}</span>
+                                <span
+                                  className={`text-[10px] leading-tight text-right ${m.home_team_id === teamId ? 'font-semibold' : 'font-medium'}`}
+                                >
+                                  {m.home_team?.name}
+                                </span>
                                 {flagImg(m.home_team?.flag_code)}
                               </div>
-                              <span className="font-bold text-gray-700 shrink-0 text-[11px]">{m.home_score}</span>
+                              <span className="font-bold text-gray-700 shrink-0 text-[11px]">
+                                {m.home_score}
+                              </span>
                               <span className="text-gray-400 shrink-0">×</span>
-                              <span className="font-bold text-gray-700 shrink-0 text-[11px]">{m.away_score}</span>
+                              <span className="font-bold text-gray-700 shrink-0 text-[11px]">
+                                {m.away_score}
+                              </span>
                               <div className="min-w-0 flex-1 flex items-center gap-1">
                                 {flagImg(m.away_team?.flag_code)}
-                                <span className={`text-[10px] leading-tight ${m.away_team_id === teamId ? 'font-semibold' : 'font-medium'}`}>{m.away_team?.name}</span>
+                                <span
+                                  className={`text-[10px] leading-tight ${m.away_team_id === teamId ? 'font-semibold' : 'font-medium'}`}
+                                >
+                                  {m.away_team?.name}
+                                </span>
                               </div>
-                              <span className={`shrink-0 inline-flex items-center px-1 py-px rounded-full text-[8px] font-bold border ${tag.className}`}>
+                              <span
+                                className={`shrink-0 inline-flex items-center px-1 py-px rounded-full text-[8px] font-bold border ${tag.className}`}
+                              >
                                 {tag.label}
                               </span>
                             </div>
-                          )
+                          );
                         })
                       ) : (
-                        <p className="text-xs text-gray-400 py-2 px-2">Nenhum jogo anterior</p>
+                        <p className="text-xs text-gray-400 py-2 px-2">
+                          Nenhum jogo anterior
+                        </p>
                       )}
                     </div>
                   ))}
@@ -455,36 +631,61 @@ export default function PredictionEditModal({
             {match.group_id && groupStandings.length > 0 && (
               <div className="modern-card no-theme-tint p-4 sm:p-5 border border-slate-200 bg-white">
                 <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide text-center mb-3">
-                  Classificação {match.group_code ? `Grupo ${match.group_code}` : 'do Grupo'}
+                  Classificação{' '}
+                  {match.group_code ? `Grupo ${match.group_code}` : 'do Grupo'}
                 </p>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead>
                       <tr className="border-b border-slate-200 text-gray-600">
-                        <th className="text-left py-2 px-2 font-semibold">Pos</th>
-                        <th className="text-left py-2 px-2 font-semibold">Time</th>
-                        <th className="text-center py-2 px-1 font-semibold">P</th>
-                        <th className="text-center py-2 px-1 font-semibold">J</th>
-                        <th className="text-center py-2 px-1 font-semibold hidden sm:table-cell">V</th>
-                        <th className="text-center py-2 px-1 font-semibold hidden sm:table-cell">E</th>
-                        <th className="text-center py-2 px-1 font-semibold hidden sm:table-cell">D</th>
-                        <th className="text-center py-2 px-1 font-semibold">GP</th>
-                        <th className="text-center py-2 px-1 font-semibold hidden sm:table-cell">GC</th>
-                        <th className="text-center py-2 px-1 font-semibold">SG</th>
+                        <th className="text-left py-2 px-2 font-semibold">
+                          Pos
+                        </th>
+                        <th className="text-left py-2 px-2 font-semibold">
+                          Time
+                        </th>
+                        <th className="text-center py-2 px-1 font-semibold">
+                          P
+                        </th>
+                        <th className="text-center py-2 px-1 font-semibold">
+                          J
+                        </th>
+                        <th className="text-center py-2 px-1 font-semibold hidden sm:table-cell">
+                          V
+                        </th>
+                        <th className="text-center py-2 px-1 font-semibold hidden sm:table-cell">
+                          E
+                        </th>
+                        <th className="text-center py-2 px-1 font-semibold hidden sm:table-cell">
+                          D
+                        </th>
+                        <th className="text-center py-2 px-1 font-semibold">
+                          GP
+                        </th>
+                        <th className="text-center py-2 px-1 font-semibold hidden sm:table-cell">
+                          GC
+                        </th>
+                        <th className="text-center py-2 px-1 font-semibold">
+                          SG
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
                       {groupStandings.map((team, idx) => {
-                        const sg = team.goals_for - team.goals_against
-                        const isPlaying = team.team_name === match.home_team?.name || team.team_name === match.away_team?.name
+                        const sg = team.goals_for - team.goals_against;
+                        const isPlaying =
+                          team.team_name === match.home_team?.name ||
+                          team.team_name === match.away_team?.name;
                         const rowClass = isPlaying
                           ? 'border-b border-slate-100 bg-indigo-50/60'
                           : idx < 2
-                          ? 'border-b border-slate-100 bg-slate-50'
-                          : 'border-b border-slate-100'
+                            ? 'border-b border-slate-100 bg-slate-50'
+                            : 'border-b border-slate-100';
                         return (
                           <tr key={team.team_name} className={rowClass}>
-                            <td className="text-center py-2 px-2 font-bold text-gray-700">{idx + 1}</td>
+                            <td className="text-center py-2 px-2 font-bold text-gray-700">
+                              {idx + 1}
+                            </td>
                             <td className="text-left py-2 px-2">
                               <div className="flex items-center gap-1.5">
                                 {team.flag_code && (
@@ -493,24 +694,50 @@ export default function PredictionEditModal({
                                     className="h-3.5 w-5 shrink-0 rounded object-cover border border-gray-200"
                                   />
                                 )}
-                                <span className={`truncate text-[10px] ${isPlaying ? 'font-semibold text-gray-800' : 'font-medium text-gray-800'}`}>{team.team_name}</span>
+                                <span
+                                  className={`truncate text-[10px] ${isPlaying ? 'font-semibold text-gray-800' : 'font-medium text-gray-800'}`}
+                                >
+                                  {team.team_name}
+                                </span>
                               </div>
                             </td>
-                            <td className="text-center py-2 px-1 font-extrabold text-slate-900">{team.points}</td>
-                            <td className="text-center py-2 px-1 text-gray-600">{team.matches}</td>
-                            <td className="text-center py-2 px-1 text-green-700 font-semibold hidden sm:table-cell">{team.wins}</td>
-                            <td className="text-center py-2 px-1 text-yellow-700 font-semibold hidden sm:table-cell">{team.draws}</td>
-                            <td className="text-center py-2 px-1 text-red-700 font-semibold hidden sm:table-cell">{team.losses}</td>
-                            <td className="text-center py-2 px-1 text-gray-700 font-medium">{team.goals_for}</td>
-                            <td className="text-center py-2 px-1 text-gray-700 font-medium hidden sm:table-cell">{team.goals_against}</td>
+                            <td className="text-center py-2 px-1 font-extrabold text-slate-900">
+                              {team.points}
+                            </td>
+                            <td className="text-center py-2 px-1 text-gray-600">
+                              {team.matches}
+                            </td>
+                            <td className="text-center py-2 px-1 text-green-700 font-semibold hidden sm:table-cell">
+                              {team.wins}
+                            </td>
+                            <td className="text-center py-2 px-1 text-yellow-700 font-semibold hidden sm:table-cell">
+                              {team.draws}
+                            </td>
+                            <td className="text-center py-2 px-1 text-red-700 font-semibold hidden sm:table-cell">
+                              {team.losses}
+                            </td>
+                            <td className="text-center py-2 px-1 text-gray-700 font-medium">
+                              {team.goals_for}
+                            </td>
+                            <td className="text-center py-2 px-1 text-gray-700 font-medium hidden sm:table-cell">
+                              {team.goals_against}
+                            </td>
                             <td
                               className="text-center py-2 px-1 font-semibold"
-                              style={{ color: sg > 0 ? '#059669' : sg < 0 ? '#dc2626' : '#666' }}
+                              style={{
+                                color:
+                                  sg > 0
+                                    ? '#059669'
+                                    : sg < 0
+                                      ? '#dc2626'
+                                      : '#666',
+                              }}
                             >
-                              {sg > 0 ? '+' : ''}{sg}
+                              {sg > 0 ? '+' : ''}
+                              {sg}
                             </td>
                           </tr>
-                        )
+                        );
                       })}
                     </tbody>
                   </table>

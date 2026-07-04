@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import TeamWithFlag from '@/components/TeamWithFlag'
 import BackButton from '@/components/BackButton'
+import PredictionEditModal from '@/components/PredictionEditModal'
 
 interface Match {
   id: string
@@ -16,6 +17,9 @@ interface Match {
   status: string
   home_score: number | null
   away_score: number | null
+  home_win_pct: number | null
+  draw_pct: number | null
+  away_win_pct: number | null
   group: { code: string } | null
   home_team: { name: string; flag_code: string | null }
   away_team: { name: string; flag_code: string | null }
@@ -52,6 +56,7 @@ export default function RodadaPage() {
   })
   const autoSaveTimersRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const saveSequenceRef = useRef<Record<string, number>>({})
+  const [modalMatch, setModalMatch] = useState<Match | null>(null)
 
   useEffect(() => {
     if (roundId && user) loadData()
@@ -96,7 +101,7 @@ export default function RodadaPage() {
     const { data: matchData, error: matchError } = await supabase
       .from('matches')
       .select(`
-        id, group_id, home_team_id, away_team_id, kickoff_at, venue, cutoff_at, status, home_score, away_score,
+        id, group_id, home_team_id, away_team_id, kickoff_at, venue, cutoff_at, status, home_score, away_score, home_win_pct, draw_pct, away_win_pct,
         group:groups(code),
         home_team:teams!matches_home_team_id_fkey(name, flag_code),
         away_team:teams!matches_away_team_id_fkey(name, flag_code)
@@ -312,7 +317,7 @@ export default function RodadaPage() {
               <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Palpites</span>
             </div>
           </div>
-          <p className="mt-0.5 text-[11px] sm:text-xs text-slate-600">Palpites fecham 2h antes de cada jogo</p>
+          <p className="mt-0.5 text-[11px] sm:text-xs text-slate-600">Palpites fecham 30 minutos antes de cada jogo</p>
         </div>
       </section>
 
@@ -389,6 +394,7 @@ export default function RodadaPage() {
               <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
                 {group.matches.map(m => {
                   const pred = preds[m.id]
+                  const isTeamPending = m.home_team?.name === 'A Definir' || m.away_team?.name === 'A Definir'
                   const isMatchLocked = !isMatchOpen(m)
                   const isClosed = m.status === 'encerrado' || new Date(m.cutoff_at) <= new Date()
                   const draft = guessDrafts[m.id]
@@ -413,6 +419,19 @@ export default function RodadaPage() {
 
                   return (
                     <div key={m.id} className={`modern-card no-theme-tint soft-hover p-4 sm:p-5 relative ${cardStateClass}`}>
+                      <button
+                        type="button"
+                        onClick={() => setModalMatch(m)}
+                        aria-label="Ver detalhes do jogo"
+                        title="Ver detalhes"
+                        className="absolute left-3 top-3 inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-100 text-slate-400 hover:bg-brand-100 hover:text-brand-600 transition border border-slate-200"
+                      >
+                        <svg viewBox="0 0 24 24" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <circle cx="12" cy="12" r="10" />
+                          <line x1="12" y1="16" x2="12" y2="12" />
+                          <line x1="12" y1="8" x2="12.01" y2="8" />
+                        </svg>
+                      </button>
                       {isDraftSynced && !saving[m.id] && (
                         <span
                           aria-label="Palpite salvo"
@@ -425,7 +444,7 @@ export default function RodadaPage() {
 
                       <div className="mb-2 flex items-center justify-center gap-2">
                         <span className="inline-flex items-center rounded-full bg-slate-100 text-slate-700 text-[11px] font-semibold px-2 py-0.5">
-                          {m.group?.code ? `Grupo ${m.group.code}` : 'Sem grupo'}
+                          {m.group?.code ? `Grupo ${m.group.code}` : 'Mata-Mata'}
                         </span>
                         <span className="inline-flex items-center rounded-full bg-indigo-100 text-indigo-700 text-xs font-bold px-2 py-0.5 border border-indigo-200">
                           {new Date(m.kickoff_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
@@ -451,7 +470,7 @@ export default function RodadaPage() {
                             max={99}
                             value={guessDrafts[m.id]?.home ?? ''}
                             onChange={e => updateDraft(m.id, 'home', e.target.value)}
-                            disabled={isMatchLocked || saving[m.id]}
+                            disabled={isMatchLocked || isTeamPending || saving[m.id]}
                             className="w-10 text-center border border-gray-300 rounded px-1 py-1.5 text-base font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100 disabled:text-gray-400"
                           />
                           <span className="text-gray-400 font-bold text-sm">×</span>
@@ -461,7 +480,7 @@ export default function RodadaPage() {
                             max={99}
                             value={guessDrafts[m.id]?.away ?? ''}
                             onChange={e => updateDraft(m.id, 'away', e.target.value)}
-                            disabled={isMatchLocked || saving[m.id]}
+                            disabled={isMatchLocked || isTeamPending || saving[m.id]}
                             className="w-10 text-center border border-gray-300 rounded px-1 py-1.5 text-base font-bold focus:outline-none focus:ring-2 focus:ring-brand-500 disabled:bg-gray-100 disabled:text-gray-400"
                           />
                         </div>
@@ -502,6 +521,40 @@ export default function RodadaPage() {
           ))}
         </div>
       )}
+
+      <PredictionEditModal
+        open={modalMatch !== null}
+        match={modalMatch ? {
+          id: modalMatch.id,
+          kickoff_at: modalMatch.kickoff_at,
+          venue: modalMatch.venue,
+          cutoff_at: modalMatch.cutoff_at,
+          group_code: modalMatch.group?.code ?? null,
+          group_id: modalMatch.group_id,
+          status: modalMatch.status as 'pendente' | 'ao_vivo' | 'encerrado',
+          home_score: modalMatch.home_score,
+          away_score: modalMatch.away_score,
+          home_team: modalMatch.home_team,
+          away_team: modalMatch.away_team,
+          home_win_pct: modalMatch.home_win_pct,
+          draw_pct: modalMatch.draw_pct,
+          away_win_pct: modalMatch.away_win_pct,
+          home_team_id: modalMatch.home_team_id,
+          away_team_id: modalMatch.away_team_id,
+        } : null}
+        onClose={() => setModalMatch(null)}
+        myPrediction={modalMatch ? (preds[modalMatch.id] ?? null) : null}
+        onPredictionChange={(home, away) => {
+          if (!modalMatch) return
+          const nextDraft: GuessDraft = {
+            home: home !== null ? String(home) : '',
+            away: away !== null ? String(away) : '',
+          }
+          setGuessDrafts(prev => ({ ...prev, [modalMatch.id]: nextDraft }))
+          scheduleAutoSave(modalMatch.id, nextDraft)
+        }}
+        isSaving={modalMatch ? (saving[modalMatch.id] ?? false) : false}
+      />
     </div>
   )
 }

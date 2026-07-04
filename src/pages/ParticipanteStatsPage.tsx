@@ -30,7 +30,8 @@ interface LeaderboardStats {
 interface Snapshot {
   rank: number;
   total_points: number;
-  match_id: string;
+  match_id: string | null;
+  group_id: string | null;
   created_at: string;
 }
 
@@ -74,7 +75,33 @@ interface ChartPoint {
   totalPoints: number;
   label: string;
   xLabel: string;
+  isGroup: boolean;
 }
+
+type DistributiveOmit<T, K extends keyof never> = T extends unknown
+  ? Omit<T, K>
+  : never;
+
+type TimelineEntry =
+  | {
+      type: 'match';
+      key: string;
+      orderKey: number;
+      match: ClosedMatch;
+      prediction: PredictionRow | null;
+      snapshot: Snapshot | null;
+      delta: number | null;
+      runningPoints: number;
+    }
+  | {
+      type: 'group';
+      key: string;
+      orderKey: number;
+      group: GroupPredResult;
+      snapshot: Snapshot;
+      delta: number | null;
+      runningPoints: number;
+    };
 
 // ---- Helper sub-components ----
 
@@ -330,7 +357,7 @@ export default function ParticipanteStatsPage() {
 
         supabase
           .from('leaderboard_snapshots')
-          .select('rank, total_points, match_id, created_at')
+          .select('rank, total_points, match_id, group_id, created_at')
           .eq('pool_id', poolId!)
           .eq('user_id', userId!)
           .order('created_at', { ascending: true }),
@@ -468,31 +495,93 @@ export default function ParticipanteStatsPage() {
     () => new Map(predictions.map((p) => [p.match_id, p])),
     [predictions],
   );
-  const snapshotMap = useMemo(
-    () => new Map(snapshots.map((s) => [s.match_id, s])),
+  const matchSnapMap = useMemo(
+    () =>
+      new Map(
+        snapshots
+          .filter((s) => s.match_id != null)
+          .map((s) => [s.match_id as string, s]),
+      ),
     [snapshots],
   );
+  const groupSnaps = useMemo(
+    () => snapshots.filter((s) => s.group_id != null),
+    [snapshots],
+  );
+  const groupResultMap = useMemo(
+    () => new Map(groupPredResults.map((g) => [g.group_id, g])),
+    [groupPredResults],
+  );
 
-  const mergedHistory = useMemo(() => {
-    let runningPoints = 0;
-    return closedMatches.map((match, index) => {
-      const prediction = predMap.get(match.id) ?? null;
-      runningPoints += prediction?.points ?? 0;
-      const snapshot = snapshotMap.get(match.id) ?? null;
-      const prevSnapshot =
-        index > 0
-          ? (snapshotMap.get(closedMatches[index - 1].id) ?? null)
-          : null;
-      const delta =
-        snapshot && prevSnapshot ? prevSnapshot.rank - snapshot.rank : null;
-      return { match, prediction, snapshot, delta, runningPoints };
+  // Timeline unificada: eventos de partida (efeito do jogo) e de fechamento de
+  // grupo (efeito do bônus), ordenados por created_at do snapshot. O acumulado
+  // (runningPoints) só conta pontos de partida; o delta compara com o evento
+  // anterior da timeline (de qualquer tipo).
+  const mergedHistory = useMemo<TimelineEntry[]>(() => {
+    const raw: Array<DistributiveOmit<TimelineEntry, 'delta' | 'runningPoints'>> =
+      [];
+
+    for (const match of closedMatches) {
+      const snapshot = matchSnapMap.get(match.id) ?? null;
+      const orderKey = new Date(
+        snapshot?.created_at ?? match.kickoff_at,
+      ).getTime();
+      raw.push({
+        type: 'match',
+        key: `m-${match.id}`,
+        orderKey,
+        match,
+        prediction: predMap.get(match.id) ?? null,
+        snapshot,
+      });
+    }
+    for (const snap of groupSnaps) {
+      const group = groupResultMap.get(snap.group_id as string);
+      if (!group) continue;
+      raw.push({
+        type: 'group',
+        key: `g-${snap.group_id}`,
+        orderKey: new Date(snap.created_at).getTime(),
+        group,
+        snapshot: snap,
+      });
+    }
+
+    raw.sort((a, b) => {
+      if (a.orderKey !== b.orderKey) return a.orderKey - b.orderKey;
+      // partida antes do grupo em empate de horário
+      return (a.type === 'match' ? 0 : 1) - (b.type === 'match' ? 0 : 1);
     });
-  }, [closedMatches, predMap, snapshotMap]);
+
+    let runningPoints = 0;
+    let lastRank: number | null = null;
+    return raw.map((item) => {
+      if (item.type === 'match') {
+        runningPoints += item.prediction?.points ?? 0;
+      } else {
+        runningPoints += item.group.points ?? 0;
+      }
+      const rank = item.snapshot?.rank ?? null;
+      const delta = rank != null && lastRank != null ? lastRank - rank : null;
+      if (rank != null) lastRank = rank;
+      return { ...item, delta, runningPoints } as TimelineEntry;
+    });
+  }, [closedMatches, matchSnapMap, groupSnaps, groupResultMap, predMap]);
 
   const chartData: ChartPoint[] = useMemo(() => {
     return mergedHistory
-      .filter((item) => item.snapshot !== null)
+      .filter((item) => item.snapshot != null)
       .map((item, index) => {
+        if (item.type === 'group') {
+          return {
+            index: index + 1,
+            rank: item.snapshot.rank,
+            totalPoints: item.runningPoints,
+            label: `🏆 Grupo ${item.group.group_code} encerrado`,
+            xLabel: `G${item.group.group_code}`,
+            isGroup: true,
+          };
+        }
         const { match, snapshot, runningPoints } = item;
         const homeAbbr = (match.home_team?.name ?? '?').substring(0, 3).toUpperCase();
         const awayAbbr = (match.away_team?.name ?? '?').substring(0, 3).toUpperCase();
@@ -502,12 +591,17 @@ export default function ParticipanteStatsPage() {
           totalPoints: runningPoints,
           label: `${match.home_team?.name ?? '?'} × ${match.away_team?.name ?? '?'}`,
           xLabel: `${homeAbbr}×${awayAbbr}`,
+          isGroup: false,
         };
       });
   }, [mergedHistory]);
 
   const computed = useMemo(() => {
-    const orderedPts = mergedHistory
+    const matchItems = mergedHistory.filter(
+      (item): item is Extract<TimelineEntry, { type: 'match' }> =>
+        item.type === 'match',
+    );
+    const orderedPts = matchItems
       .filter((item) => item.prediction !== null)
       .map((item) => item.prediction!.points ?? 0);
 
@@ -553,7 +647,7 @@ export default function ParticipanteStatsPage() {
     const zeroRate = totalPreds > 0 ? ((stats?.c0 ?? 0) / totalPreds) * 100 : 0;
 
     // Jogos sem palpite: prediction was auto-inserted after kickoff
-    const semPalpite = mergedHistory.filter((item) => {
+    const semPalpite = matchItems.filter((item) => {
       const pred = item.prediction;
       if (!pred) return true;
       return new Date(pred.created_at) >= new Date(item.match.kickoff_at);
@@ -561,7 +655,7 @@ export default function ParticipanteStatsPage() {
 
     // Palpite mais apostado (only real pre-kickoff predictions)
     const palpiteCountMap = new Map<string, number>();
-    for (const item of mergedHistory) {
+    for (const item of matchItems) {
       const pred = item.prediction;
       if (!pred) continue;
       if (new Date(pred.created_at) >= new Date(item.match.kickoff_at))
@@ -935,16 +1029,17 @@ export default function ParticipanteStatsPage() {
                       strokeWidth={2.5}
                       dot={(props: any) => {
                         const { cx, cy, payload } = props;
+                        const isGroup = payload.isGroup;
                         const isFirst = payload.rank === 1;
                         return (
                           <circle
                             key={`dot-${payload.index}`}
                             cx={cx}
                             cy={cy}
-                            r={isFirst ? 5 : 3}
-                            fill={isFirst ? '#f59e0b' : '#0052cc'}
-                            stroke={isFirst ? '#ffffff' : 'none'}
-                            strokeWidth={isFirst ? 1.5 : 0}
+                            r={isGroup ? 4.5 : isFirst ? 5 : 3}
+                            fill={isGroup ? '#a855f7' : isFirst ? '#f59e0b' : '#0052cc'}
+                            stroke={isGroup || isFirst ? '#ffffff' : 'none'}
+                            strokeWidth={isGroup || isFirst ? 1.5 : 0}
                           />
                         );
                       }}
@@ -1028,10 +1123,45 @@ export default function ParticipanteStatsPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {mergedHistory.map(
-                        ({ match, prediction, snapshot, delta, runningPoints }, idx) => (
+                      {mergedHistory.map((item, idx) =>
+                        item.type === 'group' ? (
+                          <tr key={item.key} className="bg-amber-50/70">
+                            <td className="px-3 py-3 whitespace-nowrap">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm">🏆</span>
+                                <span className="text-xs font-bold text-amber-800">
+                                  Grupo {item.group.group_code} encerrado
+                                </span>
+                              </div>
+                            </td>
+                            <td className="hidden sm:table-cell px-3 py-3 text-center text-slate-300">
+                              —
+                            </td>
+                            <td className="hidden sm:table-cell px-3 py-3 text-center text-slate-300">
+                              —
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              {item.group.points != null ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded border text-xs font-bold bg-purple-50 text-purple-700 border-purple-200">
+                                  +{item.group.points}
+                                </span>
+                              ) : (
+                                <span className="text-slate-400 text-xs">–</span>
+                              )}
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <RankBadge rank={item.snapshot.rank} />
+                            </td>
+                            <td className="px-3 py-3 text-center">
+                              <DeltaBadge delta={item.delta} />
+                            </td>
+                            <td className="px-3 py-3 text-right font-bold text-brand-700 tabular-nums">
+                              {item.runningPoints}
+                            </td>
+                          </tr>
+                        ) : (
                           <tr
-                            key={match.id}
+                            key={item.key}
                             className={
                               idx % 2 === 0
                                 ? 'bg-white hover:bg-slate-50'
@@ -1041,35 +1171,35 @@ export default function ParticipanteStatsPage() {
                             <td className="px-3 py-3 whitespace-nowrap">
                               <div className="flex items-center gap-1.5">
                                 <span className="hidden sm:inline text-xs font-semibold text-slate-700">
-                                  {match.home_team?.name ?? '?'}
+                                  {item.match.home_team?.name ?? '?'}
                                 </span>
                                 <FlagOnly
-                                  flagCode={match.home_team?.flag_code}
+                                  flagCode={item.match.home_team?.flag_code}
                                   size="xs"
                                 />
                                 <span className="text-slate-300 text-xs shrink-0">
                                   ×
                                 </span>
                                 <FlagOnly
-                                  flagCode={match.away_team?.flag_code}
+                                  flagCode={item.match.away_team?.flag_code}
                                   size="xs"
                                 />
                                 <span className="hidden sm:inline text-xs font-semibold text-slate-700">
-                                  {match.away_team?.name ?? '?'}
+                                  {item.match.away_team?.name ?? '?'}
                                 </span>
                               </div>
                             </td>
                             <td className="hidden sm:table-cell px-3 py-3 text-center">
                               <span className="font-bold text-slate-800 tabular-nums">
-                                {match.home_score ?? '–'} ×{' '}
-                                {match.away_score ?? '–'}
+                                {item.match.home_score ?? '–'} ×{' '}
+                                {item.match.away_score ?? '–'}
                               </span>
                             </td>
                             <td className="hidden sm:table-cell px-3 py-3 text-center">
-                              {prediction ? (
+                              {item.prediction ? (
                                 <span className="text-slate-700 tabular-nums">
-                                  {prediction.home_guess} ×{' '}
-                                  {prediction.away_guess}
+                                  {item.prediction.home_guess} ×{' '}
+                                  {item.prediction.away_guess}
                                 </span>
                               ) : (
                                 <span className="text-slate-300 text-xs">
@@ -1079,17 +1209,17 @@ export default function ParticipanteStatsPage() {
                             </td>
                             <td className="px-3 py-3 text-center">
                               <PointsBadge
-                                points={prediction?.points ?? null}
+                                points={item.prediction?.points ?? null}
                               />
                             </td>
                             <td className="px-3 py-3 text-center">
-                              <RankBadge rank={snapshot?.rank ?? null} />
+                              <RankBadge rank={item.snapshot?.rank ?? null} />
                             </td>
                             <td className="px-3 py-3 text-center">
-                              <DeltaBadge delta={delta} />
+                              <DeltaBadge delta={item.delta} />
                             </td>
                             <td className="px-3 py-3 text-right font-bold text-brand-700 tabular-nums">
-                              {runningPoints}
+                              {item.runningPoints}
                             </td>
                           </tr>
                         ),
@@ -1112,16 +1242,6 @@ export default function ParticipanteStatsPage() {
                   <h3 className="text-xs font-bold uppercase text-slate-400 tracking-wider">
                     Classificações de Grupos
                   </h3>
-                  {groupPredResults.some((g) => (g.points ?? 0) > 0) && (
-                    <span className="text-xs font-bold text-violet-700 bg-violet-50 border border-violet-200 px-2.5 py-0.5 rounded-full">
-                      ⭐ +
-                      {groupPredResults.reduce(
-                        (sum, g) => sum + (g.points ?? 0),
-                        0,
-                      )}{' '}
-                      bônus
-                    </span>
-                  )}
                 </div>
                 <svg
                   className={`w-4 h-4 text-slate-400 transition-transform duration-200 ${groupsOpen ? '' : '-rotate-90'}`}

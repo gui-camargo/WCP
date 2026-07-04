@@ -78,6 +78,7 @@ interface TeamClassification {
 
 const PHASE_LABELS: Record<string, string> = {
   grupos: 'Fase de Grupos',
+  dezesseis_avos: 'Dezesseistavas de Final',
   oitavas: 'Oitavas de Final',
   quartas: 'Quartas de Final',
   semi: 'Semifinal',
@@ -86,7 +87,9 @@ const PHASE_LABELS: Record<string, string> = {
 }
 
 function compactRoundLabel(label: string) {
-  return label.replace(/rodada\s*(\d+)/gi, 'R$1')
+  return label
+    .replace(/rodada\s*(\d+)/gi, 'R$1')
+    .replace(/dezesseistavas\s+de\s+final/gi, '16 avos')
 }
 
 export default function ResultadosPage() {
@@ -747,7 +750,7 @@ export default function ResultadosPage() {
 
   const matchesByGroup = useMemo(() => {
     const grouped = filteredMatches.reduce<Record<string, Match[]>>((acc, match) => {
-      const key = match.group?.code ?? 'Sem grupo'
+      const key = match.group?.code ?? 'Mata-Mata'
       acc[key] = acc[key] ?? []
       acc[key].push(match)
       return acc
@@ -755,21 +758,21 @@ export default function ResultadosPage() {
 
     return Object.entries(grouped)
       .sort(([a], [b]) => {
-        if (a === 'Sem grupo') return 1
-        if (b === 'Sem grupo') return -1
+        if (a === 'Mata-Mata') return 1
+        if (b === 'Mata-Mata') return -1
         return a.localeCompare(b)
       })
       .map(([groupCode, groupMatches]) => ({ groupCode, matches: groupMatches }))
   }, [filteredMatches])
 
   const groupedByPhase = useMemo(() => {
-    const phaseOrder = ['grupos', 'oitavas', 'quartas', 'semi', 'terceiro_lugar', 'final']
+    const phaseOrder = ['dezesseis_avos', 'grupos', 'oitavas', 'quartas', 'semi', 'terceiro_lugar', 'final']
 
     const byPhase = matchesByGroup
       .flatMap(group => group.matches)
       .reduce<Record<string, Record<string, Record<string, Match[]>>>>((acc, match) => {
         const phase = match.round?.phase ?? 'fase_indefinida'
-        const group = match.group?.code ?? 'Sem grupo'
+        const group = match.group?.code ?? 'Mata-Mata'
         const round = match.round?.name ?? 'Rodada'
         acc[phase] = acc[phase] ?? {}
         acc[phase][group] = acc[phase][group] ?? {}
@@ -792,8 +795,8 @@ export default function ResultadosPage() {
         label: PHASE_LABELS[phase] ?? 'Fase',
         groups: Object.entries(groups)
           .sort(([a], [b]) => {
-            if (a === 'Sem grupo') return 1
-            if (b === 'Sem grupo') return -1
+            if (a === 'Mata-Mata') return 1
+            if (b === 'Mata-Mata') return -1
             return a.localeCompare(b)
           })
           .map(([groupCode, rounds]) => ({
@@ -959,7 +962,7 @@ export default function ResultadosPage() {
                 {phaseSection.groups.map(group => (
                   <section key={group.groupCode} className="modern-card border border-slate-200 overflow-hidden">
                     {(() => {
-                      const groupLabel = group.groupCode === 'Sem grupo' ? 'Eliminatorias' : `Grupo ${group.groupCode}`
+                      const groupLabel = group.groupCode === 'Mata-Mata' ? phaseSection.label : `Grupo ${group.groupCode}`
                       const groupKey = `${phaseSection.phase}:${group.groupCode}`
                       const isOpen = openGroups[groupKey] ?? true
                       const matchesCount = group.rounds.reduce((acc, round) => acc + round.matches.length, 0)
@@ -985,7 +988,7 @@ export default function ResultadosPage() {
                               <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black ${
                                 isOpen ? 'bg-white/15 text-white' : 'bg-slate-100 text-slate-600'
                               }`}>
-                                {group.groupCode === 'Sem grupo' ? 'E' : group.groupCode}
+                                {group.groupCode === 'Mata-Mata' ? 'E' : group.groupCode}
                               </span>
                               <span className="text-xs sm:text-sm font-extrabold tracking-wide uppercase truncate">{groupLabel}</span>
                             </span>
@@ -1030,7 +1033,7 @@ export default function ResultadosPage() {
                                             <ResultMatchCard
                                               kickoffAt={m.kickoff_at}
                                               venue={m.venue}
-                                              metaPrefix={round.roundName}
+                                              metaPrefix={compactRoundLabel(round.roundName)}
                                               metaPrefixMobile={compactRoundLabel(round.roundName)}
                                               homeTeam={m.home_team}
                                               awayTeam={m.away_team}

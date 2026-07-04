@@ -33,12 +33,12 @@ export interface Database {
       rounds: {
         Row: {
           id: string; pool_id: string; name: string
-          phase: 'grupos' | 'oitavas' | 'quartas' | 'semi' | 'final' | 'terceiro_lugar'
+          phase: 'grupos' | 'dezesseis_avos' | 'oitavas' | 'quartas' | 'semi' | 'final' | 'terceiro_lugar'
           created_at: string
         }
         Insert: {
           pool_id: string; name: string
-          phase: 'grupos' | 'oitavas' | 'quartas' | 'semi' | 'final' | 'terceiro_lugar'
+          phase: 'grupos' | 'dezesseis_avos' | 'oitavas' | 'quartas' | 'semi' | 'final' | 'terceiro_lugar'
         }
         Update: { name?: string; phase?: string }
       }

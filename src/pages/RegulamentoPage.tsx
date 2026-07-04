@@ -40,7 +40,7 @@ export default function RegulamentoPage() {
           <li><span className="font-semibold">4º</span> — É de inteira responsabilidade dos participantes o envio dos palpites no sistema antes do prazo de cada jogo.</li>
           <li>
             <span className="font-semibold">5º</span> — Os palpites têm prazo individual por partida:{' '}
-            <span className="font-semibold text-brand-700">os palpites fecham 2 horas antes do horário oficial de cada jogo.</span>{' '}
+            <span className="font-semibold text-brand-700">os palpites fecham 30 minutos antes do horário oficial de cada jogo.</span>{' '}
             Palpites enviados após o fechamento não serão computados, sendo considerado o placar de 0x0 para aquela partida.
           </li>
           <li>
@@ -54,7 +54,7 @@ export default function RegulamentoPage() {
           </li>
           <li>
             <span className="font-semibold">8º</span> — Os palpites de todos os participantes poderão ser visualizados no sistema após o fechamento do prazo de envio de cada partida,
-            ou seja, a partir de 2 horas antes do horário oficial do jogo.
+            ou seja, a partir de 30 minutos antes do horário oficial do jogo.
           </li>
           <li>
             <span className="font-semibold">9º</span> — Após a fase de grupos, existe a possibilidade da partida ser decidida na prorrogação ou disputa de pênaltis.

@@ -35,23 +35,35 @@ function findDbMatch(
   venueName: string,
   skipped: { event_id: string; reason: string }[],
   eventId: string,
+  requireVenueMatch = false,
 ): any | null {
   const candidates = matches.filter((m: any) => {
     const diff = Math.abs(new Date(m.kickoff_at).getTime() - eventDate.getTime())
     return diff <= 5 * 60 * 1000
   })
 
-  if (candidates.length === 1) return candidates[0]
+  if (candidates.length === 0) {
+    skipped.push({ event_id: eventId, reason: 'no DB match for kickoff time' })
+    return null
+  }
 
-  if (candidates.length > 1) {
-    const dbVenue = ESPN_VENUE_TO_DB[venueName]
+  const dbVenue = ESPN_VENUE_TO_DB[venueName]
+
+  // When closing a match (requireVenueMatch=true) always verify the venue so that a
+  // stale ESPN "post" event for an already-encerrado match doesn't get redirected to
+  // the sibling simultaneous match (same kickoff_at, now the only open candidate).
+  if (requireVenueMatch && dbVenue) {
     const match = candidates.find((m: any) => m.venue === dbVenue) ?? null
-    if (!match) skipped.push({ event_id: eventId, reason: `${candidates.length} candidates, venue "${venueName}" unresolved` })
+    if (!match) skipped.push({ event_id: eventId, reason: `venue "${venueName}" → "${dbVenue}" not matched among ${candidates.length} candidate(s)` })
     return match
   }
 
-  skipped.push({ event_id: eventId, reason: 'no DB match for kickoff time' })
-  return null
+  if (candidates.length === 1) return candidates[0]
+
+  // Multiple candidates with no venue constraint (live score): disambiguate by venue.
+  const match = dbVenue ? (candidates.find((m: any) => m.venue === dbVenue) ?? null) : null
+  if (!match) skipped.push({ event_id: eventId, reason: `${candidates.length} candidates, venue "${venueName}" unresolved` })
+  return match
 }
 
 function espnDate(date: Date): string {
@@ -121,9 +133,6 @@ Deno.serve(async () => {
     const competition = event.competitions?.[0]
     const venueName: string = competition?.venue?.fullName ?? ''
 
-    const dbMatch = findDbMatch(matches, eventDate, venueName, skipped, event.id)
-    if (!dbMatch) continue
-
     const homeComp = competition?.competitors?.find((c: any) => c.homeAway === 'home')
     const awayComp = competition?.competitors?.find((c: any) => c.homeAway === 'away')
     const homeScore = parseInt(homeComp?.score ?? '0')
@@ -131,6 +140,12 @@ Deno.serve(async () => {
     const isFinished = competition?.status?.type?.completed === true
     const newStatus = isFinished ? 'encerrado' : 'ao_vivo'
     const timeDetail: string | null = isFinished ? null : (competition?.status?.type?.shortDetail ?? null)
+
+    // Pass isFinished so the lookup rejects stale "post" events that might match
+    // the sibling simultaneous match (same kickoff, different venue) once the
+    // original match is already encerrado and excluded from the DB query.
+    const dbMatch = findDbMatch(matches, eventDate, venueName, skipped, event.id, isFinished)
+    if (!dbMatch) continue
 
     const { error } = await supabase
       .from('matches')

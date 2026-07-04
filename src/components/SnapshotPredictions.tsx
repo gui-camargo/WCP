@@ -50,17 +50,13 @@ export default function SnapshotPredictions({
 
   const sortedPredictions = isFinished
     ? [...predictions].sort((a, b) => {
-        // Primary: current rank from leaderboard (immune to stale snapshots)
-        const hasCurrent = a.current_rank != null || b.current_rank != null
-        if (hasCurrent) {
-          const aRank = a.current_rank ?? 9999
-          const bRank = b.current_rank ?? 9999
-          if (aRank !== bRank) return aRank - bRank
-        } else if (hasRankData) {
+        // Primary: rank_after (posição logo após este jogo) — bate com o badge mostrado.
+        if (hasRankData) {
           const aRank = a.rank_after ?? 9999
           const bRank = b.rank_after ?? 9999
           if (aRank !== bRank) return aRank - bRank
         } else {
+          // Fallback (sem dados de rank): por pontos do jogo.
           const aPoints = a.points ?? 0
           const bPoints = b.points ?? 0
           if (bPoints !== aPoints) return bPoints - aPoints

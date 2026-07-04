@@ -334,7 +334,13 @@ export default function BolaoPage() {
   }
 
   function compactRoundLabel(label: string) {
-    return label.replace(/rodada\s*(\d+)/gi, 'R$1');
+    return label
+      .replace(/rodada\s*(\d+)/gi, 'R$1')
+      .replace(/dezesseistavas\s+de\s+final/gi, '16 avos')
+      .replace(/oitavas\s+de\s+final/gi, 'Oitavas')
+      .replace(/quartas\s+de\s+final/gi, 'Quartas')
+      .replace(/semifinais?/gi, 'Semi')
+      .replace(/disputa\s+d[eo]\s+3[oº°]/gi, '3º Lugar');
   }
 
   function formatCents(cents: number) {
@@ -527,7 +533,7 @@ export default function BolaoPage() {
                   Premiação
                   <IconAward className="w-6 h-6 sm:w-7 sm:h-7 text-amber-600" />
                 </h2>
-                <div className="rounded-xl border border-emerald-200 bg-white px-3 py-2 text-center min-w-[120px] sm:min-w-[180px] flex sm:flex-row items-center justify-center gap-2 sm:gap-2.5">
+                <div className="rounded-lg border border-emerald-200 bg-white px-3 py-2 text-center min-w-[120px] sm:min-w-[180px] flex sm:flex-row items-center justify-center gap-2 sm:gap-2.5">
                   <IconParticipants className="w-6 h-6 sm:w-7 sm:h-7 text-emerald-700 flex-shrink-0" />
                   <div className="flex flex-col items-start justify-center gap-0">
                     <p className="text-sm sm:text-base font-extrabold text-emerald-800">
@@ -627,11 +633,8 @@ export default function BolaoPage() {
                       {/* meta */}
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <div className="inline-flex items-center rounded-lg border border-slate-300 bg-slate-50 px-2 py-1">
-                          <span className="sm:hidden text-[10px] font-semibold text-gray-700">
+                          <span className="text-[10px] font-semibold text-gray-700">
                             {compactRoundLabel(findRoundName(match.round_id))}
-                          </span>
-                          <span className="hidden sm:inline text-[10px] font-semibold text-gray-700">
-                            {findRoundName(match.round_id)}
                           </span>
                         </div>
                         <span
