@@ -166,8 +166,7 @@ export default function PredictionEditModal({
               `home_team_id.eq.${match.home_team_id},away_team_id.eq.${match.home_team_id}`,
             )
             .eq('status', 'encerrado')
-            .order('kickoff_at', { ascending: false })
-            .limit(3),
+            .order('kickoff_at', { ascending: false }),
           supabase
             .from('matches')
             .select(matchSelect)
@@ -175,8 +174,7 @@ export default function PredictionEditModal({
               `home_team_id.eq.${match.away_team_id},away_team_id.eq.${match.away_team_id}`,
             )
             .eq('status', 'encerrado')
-            .order('kickoff_at', { ascending: false })
-            .limit(3),
+            .order('kickoff_at', { ascending: false }),
           groupQuery,
         ]);
 

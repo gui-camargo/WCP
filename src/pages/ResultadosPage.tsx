@@ -766,7 +766,7 @@ export default function ResultadosPage() {
   }, [filteredMatches])
 
   const groupedByPhase = useMemo(() => {
-    const phaseOrder = ['dezesseis_avos', 'grupos', 'oitavas', 'quartas', 'semi', 'terceiro_lugar', 'final']
+    const phaseOrder = ['final', 'terceiro_lugar', 'semi', 'quartas', 'oitavas', 'dezesseis_avos', 'grupos']
 
     const byPhase = matchesByGroup
       .flatMap(group => group.matches)

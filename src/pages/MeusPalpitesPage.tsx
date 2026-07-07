@@ -289,12 +289,12 @@ export default function MeusPalpitesPage() {
 
   const orderedOtherPhases = useMemo(() => {
     const phaseOrder = [
-      'dezesseis_avos',
-      'oitavas',
-      'quartas',
-      'semi',
-      'terceiro_lugar',
       'final',
+      'terceiro_lugar',
+      'semi',
+      'quartas',
+      'oitavas',
+      'dezesseis_avos',
     ];
     const phases = Object.keys(otherRounds);
     return phases.sort((a, b) => {
